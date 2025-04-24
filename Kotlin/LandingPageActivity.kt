@@ -24,19 +24,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import kotlinx.coroutines.launch
 import java.util.*
 
 // Define colors for the new design
-val GradientStart = Color(0xFFEC407A) // Vibrant Pink
-val GradientEnd = Color(0xFFAB47BC) // Purple
+val GradientStart = Color(0xFF800000) // Maroon
+val GradientEnd = Color(0xFFFFFFFF)   // White
 val FrostedBackground = Color.White.copy(alpha = 0.1f)
 val AccentColor = Color(0xFFFFCA28) // Yellow for highlights
 
@@ -44,7 +42,7 @@ class LandingPageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            BaseConverterTheme(darkTheme = true) {
+            BaseConverterTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent
@@ -72,7 +70,6 @@ fun LandingPage(
     username: String,
     onBaseConvertClick: () -> Unit
 ) {
-    val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -105,7 +102,7 @@ fun LandingPage(
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(
                                 Icons.Default.Menu,
-                                contentDescription = "Open Menu",
+                                contentDescription = "Open टीमenu",
                                 tint = Color.White
                             )
                         }
@@ -113,7 +110,7 @@ fun LandingPage(
                 )
             },
             bottomBar = {
-                BottomNavigationBar(navController)
+                BottomNavigationBar(username = username)
             },
             floatingActionButton = {
                 val scale by animateFloatAsState(
@@ -215,6 +212,7 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
         DrawerItem("Logout", Icons.Default.ExitToApp) {
             val context = LocalContext.current
             Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 context.startActivity(this)
             }
             (context as? ComponentActivity)?.finish()
@@ -242,28 +240,40 @@ fun DrawerItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVect
 }
 
 @Composable
-fun BottomNavigationBar(navController: androidx.navigation.NavHostController) {
+fun BottomNavigationBar(username: String) {
+    val context = LocalContext.current
+
     NavigationBar(
         containerColor = FrostedBackground,
         contentColor = Color.White
     ) {
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home") },
-            selected = navController.currentDestination?.route == "home",
-            onClick = { navController.navigate("home") }
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White) },
+            label = { Text("Home", color = Color.White) },
+            selected = true, // Home is the current screen
+            onClick = { /* Already on Home, no action needed */ }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-            label = { Text("Profile") },
-            selected = navController.currentDestination?.route == "profile",
-            onClick = { navController.navigate("profile") }
+            icon = { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Color.White) },
+            label = { Text("Profile", color = Color.White) },
+            selected = false,
+            onClick = {
+                Intent(context, ProfileActivity::class.java).apply {
+                    putExtra("logged_in_user", username)
+                    context.startActivity(this)
+                }
+            }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.History, contentDescription = "History") },
-            label = { Text("History") },
-            selected = navController.currentDestination?.route == "history",
-            onClick = { navController.navigate("history") }
+            icon = { Icon(Icons.Default.History, contentDescription = "History", tint = Color.White) },
+            label = { Text("History", color = Color.White) },
+            selected = false,
+            onClick = {
+                Intent(context, HistoryActivity::class.java).apply {
+                    putExtra("logged_in_user", username)
+                    context.startActivity(this)
+                }
+            }
         )
     }
 }
@@ -438,5 +448,13 @@ fun FeatureItem(title: String, description: String) {
                 color = Color.White.copy(alpha = 0.8f)
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LandingPagePreview() {
+    BaseConverterTheme {
+        LandingPage(username = "User", {})
     }
 }
