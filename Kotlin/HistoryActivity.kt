@@ -1,6 +1,7 @@
 package com.example.baseconverter
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -21,8 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 
-
-
 class HistoryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,11 +30,11 @@ class HistoryActivity : ComponentActivity() {
             BaseConverterTheme(darkTheme = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = LightPink
+                    color = Color(0xFF98FB98) // PaleGreen background
                 ) {
                     HistoryScreen(
                         username = username,
-                        onBackClick = { finish() },
+                        onBackClick = { onBackPressedDispatcher.onBackPressed() },
                         databaseManager = DatabaseManager(this)
                     )
                 }
@@ -53,66 +52,96 @@ fun HistoryScreen(
 ) {
     val historyList = remember { mutableStateListOf<DatabaseManager.ConversionEntry>() }
 
+    // Colors matching your theme
+    val LightYellow = Color(0xFFFFF5E4)
+    val Maroon = Color(0xFF660000)
+    val LightRed = Color(0xFFFFA8A8)
+    val Pink = Color(0xFFFFC1CC)
+
+    // Fetch conversion history with error handling
     LaunchedEffect(Unit) {
-        // Load history from the database for the specific user
-        val historyFromDB = databaseManager.getConversionHistory(username)
-        historyList.clear()
-        historyList.addAll(historyFromDB)
+        try {
+            val historyFromDB = databaseManager.getConversionHistory(username)
+            historyList.clear()
+            historyList.addAll(historyFromDB)
+            if (historyFromDB.isEmpty()) {
+                Log.w("HistoryScreen", "No conversion history found for $username")
+            }
+        } catch (e: Exception) {
+            Log.e("HistoryScreen", "Error loading conversion history for $username", e)
+            historyList.clear() // Ensure list is empty on error
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Conversion History", color = Color.White) },
+                title = { Text("Conversion History", color = Color.DarkGray) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             Icons.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = Maroon
                         )
                     }
                 },
                 actions = {
                     TextButton(onClick = {
-                        databaseManager.clearConversionHistory(username)
-                        historyList.clear()
+                        try {
+                            databaseManager.clearConversionHistory(username)
+                            historyList.clear()
+                        } catch (e: Exception) {
+                            Log.e("HistoryScreen", "Error clearing conversion history", e)
+                        }
                     }) {
                         Text("Delete All", color = Pink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Maroon)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White.copy(alpha = 0.7f))
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(LightPink)
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .background(Color.Gray) // Placeholder background
         ) {
-            if (historyList.isEmpty()) {
-                Text(
-                    text = "No conversion history available",
-                    color = Color.DarkGray,
-                    fontSize = 16.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(historyList) { item ->
-                        HistoryItem(
-                            conversion = item
-                        )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (historyList.isEmpty()) {
+                    Text(
+                        text = "No conversion history available",
+                        color = Color.DarkGray,
+                        fontSize = 16.sp,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(historyList) { item ->
+                            HistoryItem(conversion = item)
+                        }
                     }
                 }
             }
+
+            Text(
+                text = "© 2025 Base Converter",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
+                fontSize = 12.sp,
+                color = Color(0xFF0A1F44)
+            )
         }
     }
 }
@@ -124,13 +153,9 @@ fun HistoryItem(conversion: DatabaseManager.ConversionEntry) {
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = LightYellow),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.7f))
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "${conversion.inputValue} (Base ${conversion.inputBase}) → ${conversion.outputValue} (Base ${conversion.outputBase})",
                 style = MaterialTheme.typography.bodyLarge,
@@ -151,24 +176,16 @@ fun HistoryItem(conversion: DatabaseManager.ConversionEntry) {
 @Composable
 fun HistoryScreenPreview() {
     BaseConverterTheme(darkTheme = true) {
-        // Mock DatabaseManager for preview without requiring a Context
-        val mockDatabaseManager = object {
-            fun getConversionHistory(username: String): List<DatabaseManager.ConversionEntry> {
-                return listOf(
-                    DatabaseManager.ConversionEntry("123", 10, "7B", 16, System.currentTimeMillis()),
-                    DatabaseManager.ConversionEntry("1010", 2, "A", 16, System.currentTimeMillis() - 100000)
-                )
-            }
-
-            fun clearConversionHistory(username: String) {
-                // No-op for preview
-            }
+        val mockDatabaseManager = object : DatabaseManager(null) {
+            override fun getConversionHistory(username: String) = listOf(
+                ConversionEntry("123", 10, "7B", 16, System.currentTimeMillis()),
+                ConversionEntry("1010", 2, "A", 16, System.currentTimeMillis() - 100000)
+            )
         }
-
         HistoryScreen(
             username = "PreviewUser",
             onBackClick = {},
-            databaseManager = mockDatabaseManager as DatabaseManager
+            databaseManager = mockDatabaseManager
         )
     }
 }
