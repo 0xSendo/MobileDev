@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,8 +20,10 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import kotlinx.coroutines.launch
 
-
 class RegisterActivity : ComponentActivity() {
     private lateinit var databaseManager: DatabaseManager
 
@@ -44,7 +46,7 @@ class RegisterActivity : ComponentActivity() {
             BaseConverterTheme(darkTheme = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = LightPink
+                    color = Color(0xFF98FB98) // PaleGreen, matching login page
                 ) {
                     RegisterScreen(
                         databaseManager = databaseManager,
@@ -79,6 +81,12 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    // Define colors to match login page
+    val LightYellow = Color(0xFFFFF5E4)
+    val Maroon = Color(0xFF660000)
+    val LightRed = Color(0xFFFFA8A8)
+    val Pink = Color(0xFFFFC1CC) // Assuming Pink from original code
 
     // Helper function to validate and handle registration (non-composable)
     fun validateAndRegister() {
@@ -124,11 +132,18 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
 
     // Background with app branding
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(color = LightPink),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // App title at the top
+
         // Registration card
         Card(
             modifier = Modifier
@@ -136,7 +151,7 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
                 .padding(16.dp)
                 .verticalScroll(scrollState),
             colors = CardDefaults.cardColors(
-                containerColor = LightYellow
+                containerColor = Color.White.copy(alpha = 0.7f) // Semi-transparent white
             ),
             elevation = CardDefaults.cardElevation(
                 defaultElevation = 8.dp
@@ -419,7 +434,7 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
                             .fillMaxWidth()
                             .padding(top = 8.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = LightYellow
+                            containerColor = Color.White.copy(alpha = 0.7f) // Semi-transparent white
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -463,7 +478,7 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp),
             fontSize = 12.sp,
-            color = Color.DarkGray
+            color = Color(0xFF0A1F44) // Matching login page
         )
     }
 }
