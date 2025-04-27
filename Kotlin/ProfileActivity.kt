@@ -1,73 +1,89 @@
 package com.example.baseconverter
 
 import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.OnBackPressedCallback
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import coil.compose.rememberAsyncImagePainter
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import android.util.Log
-import androidx.compose.material3.ExperimentalMaterial3Api
 
 class ProfileActivity : ComponentActivity() {
     private lateinit var databaseManager: DatabaseManager
+    private lateinit var sharedPreferences: SharedPreferences
+    private var backPressedTime: Long = 0
+    private val BACK_PRESS_INTERVAL = 2000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val username = intent.getStringExtra("logged_in_user") ?: "Unknown"
         databaseManager = DatabaseManager(this)
+        sharedPreferences = getSharedPreferences("ProfilePrefs", MODE_PRIVATE)
+
+        // Handle phone's back button press
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - backPressedTime <= BACK_PRESS_INTERVAL) {
+                    finishAffinity() // Exit the app
+                } else {
+                    backPressedTime = currentTime
+                    Toast.makeText(this@ProfileActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, callback)
 
         setContent {
             BaseConverterTheme(darkTheme = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF98FB98)
+                    color = Color.Transparent
                 ) {
                     ProfileScreen(
                         username = username,
                         databaseManager = databaseManager,
+                        sharedPreferences = sharedPreferences,
                         onLogoutConfirmed = { navigateToLoginScreen() },
-                        onBackClick = { onBackPressedDispatcher.onBackPressed() },
-                        onNotesClick = { navigateToNotesPage(username) },
-                        onHistoryClick = { navigateToHistoryPage(username) }
+                        onBackClick = { navigateToLandingScreen() },
+                        onSettingsClick = { navigateToSettingsScreen(username) }
                     )
                 }
             }
@@ -77,20 +93,21 @@ class ProfileActivity : ComponentActivity() {
     private fun navigateToLoginScreen() {
         startActivity(Intent(this, MainActivity::class.java))
         finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
-    private fun navigateToHistoryPage(username: String) {
-        startActivity(
-            Intent(this, HistoryActivity::class.java)
-                .putExtra("logged_in_user", username)
-        )
+    private fun navigateToLandingScreen() {
+        startActivity(Intent(this, LandingPageActivity::class.java))
+        finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
-    private fun navigateToNotesPage(username: String) {
-        startActivity(
-            Intent(this, NotesActivity::class.java)
-                .putExtra("logged_in_user", username)
-        )
+    private fun navigateToSettingsScreen(username: String) {
+        val intent = Intent(this, SettingsActivity::class.java).apply {
+            putExtra("logged_in_user", username)
+        }
+        startActivity(intent)
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
 
@@ -99,134 +116,557 @@ class ProfileActivity : ComponentActivity() {
 fun ProfileScreen(
     username: String,
     databaseManager: DatabaseManager,
+    sharedPreferences: SharedPreferences,
     onLogoutConfirmed: () -> Unit,
     onBackClick: () -> Unit,
-    onNotesClick: () -> Unit,
-    onHistoryClick: () -> Unit
+    onSettingsClick: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
+    var userDetails by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    var isEditing by remember { mutableStateOf(false) }
+    var editedUsername by remember { mutableStateOf("") }
+    var editedEmail by remember { mutableStateOf("") }
+    var editedFirstName by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var profileImageUri by remember { mutableStateOf<String?>(null) }
 
-    val LightYellow = Color(0xFFFFF5E4)
-    val Maroon = Color(0xFF660000)
-    val Pink = Color(0xFFFFC1CC)
+    // Define colors for the design
+    val GradientStart = Color(0xFF800000) // Maroon
+    val GradientEnd = Color(0xFFFFFFFF)   // White
+    val CardBackground = Color.White.copy(alpha = 0.1f)
+    val AccentColor = Color(0xFFFFCA28) // Yellow for highlights
+    val TextColor = Color.White
 
+    // Load user details
     LaunchedEffect(username) {
         try {
             databaseManager.getUserDetails(username)?.let { details ->
-                email = details.second
+                userDetails = details
+                editedUsername = details.first
+                editedEmail = details.second
+                editedFirstName = details.third
             } ?: run {
-                email = "No email available"
+                userDetails = Triple("Unknown", "No email available", "Unknown")
+                editedUsername = "Unknown"
+                editedEmail = "No email available"
+                editedFirstName = "Unknown"
                 Log.w("ProfileScreen", "No user details found for $username")
             }
         } catch (e: Exception) {
             Log.e("ProfileScreen", "Error loading user details for $username", e)
-            email = "Error loading email"
+            userDetails = Triple("Error", "Error loading email", "Error")
+            editedUsername = "Error"
+            editedEmail = "Error loading email"
+            editedFirstName = "Error"
         }
     }
 
+    // Load profile picture URI from SharedPreferences
+    LaunchedEffect(Unit) {
+        profileImageUri = sharedPreferences.getString("profile_image_uri_$username", null)
+    }
+
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            profileImageUri = it.toString()
+            // Save the URI to SharedPreferences
+            sharedPreferences.edit()
+                .putString("profile_image_uri_$username", it.toString())
+                .apply()
+        }
+    }
+
+    // Logout dialog
     if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Logout Confirmation", color = Color.DarkGray) },
-            text = { Text("Are you sure you want to logout?", color = Color.DarkGray) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLogoutDialog = false
-                        onLogoutConfirmed()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Maroon)
+        Dialog(onDismissRequest = { showLogoutDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = CardBackground,
+                modifier = Modifier
+                    .width(280.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Yes", color = Color.White)
+                    Text(
+                        text = "Logout Confirmation",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextColor
+                    )
+                    Text(
+                        text = "Are you sure you want to logout?",
+                        fontSize = 16.sp,
+                        color = TextColor.copy(alpha = 0.8f)
+                    )
+                    ButtonWithSlide(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogoutConfirmed()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentColor,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Yes", fontSize = 16.sp)
+                    }
+                    TextButton(
+                        onClick = { showLogoutDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("No", color = AccentColor, fontSize = 16.sp)
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("No", color = Pink)
-                }
-            },
-            containerColor = Color.White.copy(alpha = 0.7f)
-        )
+            }
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(username, color = Color.DarkGray, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Profile",
+                        color = TextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Maroon)
+                    IconButtonWithFade(
+                        onClick = onBackClick
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = TextColor
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* Settings? */ }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Maroon)
+                    IconButtonWithSlide(
+                        onClick = onSettingsClick
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = TextColor
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White.copy(alpha = 0.7f))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        }
+        },
+        containerColor = Color.Transparent
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(LightYellow)
+                .background(
+                    Brush.verticalGradient(listOf(GradientStart, GradientEnd))
+                )
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Column {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_background),
-                        contentDescription = "Profile Picture",
+
+                // Profile Picture with Upload Option
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(CircleShape)
+                        .background(Color.Gray)
+                        .shadow(8.dp, CircleShape)
+                        .clickable(enabled = isEditing) { if (isEditing) imagePickerLauncher.launch("image/*") }
+                ) {
+                    if (profileImageUri != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(profileImageUri),
+                            contentDescription = "Profile Picture",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_background),
+                            contentDescription = "Profile Picture",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    // Overlay to indicate clickable, shown only when editing
+                    if (isEditing) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Upload",
+                                color = AccentColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // User Information Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .clip(RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground)
+                ) {
+                    Column(
                         modifier = Modifier
-                            .size(100.dp)
-                            .clip(CircleShape)
-                            .background(Color.Gray),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(email, style = MaterialTheme.typography.bodyLarge, color = Maroon)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { /* Edit profile */ },
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
-                    colors = ButtonDefaults.buttonColors(containerColor = Maroon)
-                ) {
-                    Text("Edit Profile", fontSize = 18.sp, color = Color.White)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .clickable(onClick = onNotesClick),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.7f))
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Notes", style = MaterialTheme.typography.bodyLarge, color = Color.DarkGray)
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (isEditing) {
+                            // Editable Fields
+                            OutlinedTextField(
+                                value = editedUsername,
+                                onValueChange = { editedUsername = it },
+                                label = { Text("Username", color = TextColor) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = "Username",
+                                        tint = AccentColor
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.outlinedTextFieldColors(
+                                    focusedBorderColor = AccentColor,
+                                    unfocusedBorderColor = TextColor.copy(alpha = 0.5f),
+                                    cursorColor = AccentColor
+                                )
+                            )
+                            OutlinedTextField(
+                                value = editedEmail,
+                                onValueChange = { editedEmail = it },
+                                label = { Text("Email", color = TextColor) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Email,
+                                        contentDescription = "Email",
+                                        tint = AccentColor
+                                    )
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.outlinedTextFieldColors(
+                                    focusedBorderColor = AccentColor,
+                                    unfocusedBorderColor = TextColor.copy(alpha = 0.5f),
+                                    cursorColor = AccentColor
+                                )
+                            )
+                            OutlinedTextField(
+                                value = editedFirstName,
+                                onValueChange = { editedFirstName = it },
+                                label = { Text("First Name", color = TextColor) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = "First Name",
+                                        tint = AccentColor
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.outlinedTextFieldColors(
+                                    focusedBorderColor = AccentColor,
+                                    unfocusedBorderColor = TextColor.copy(alpha = 0.5f),
+                                    cursorColor = AccentColor
+                                )
+                            )
+                        } else {
+                            // Display Fields
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Username",
+                                    tint = AccentColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Username",
+                                        fontSize = 14.sp,
+                                        color = TextColor.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = userDetails?.first ?: "Loading...",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextColor
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Email,
+                                    contentDescription = "Email",
+                                    tint = AccentColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Email",
+                                        fontSize = 14.sp,
+                                        color = TextColor.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = userDetails?.second ?: "Loading...",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextColor
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "First Name",
+                                    tint = AccentColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "First Name",
+                                        fontSize = 14.sp,
+                                        color = TextColor.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = userDetails?.third ?: "Loading...",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextColor
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .clickable(onClick = onHistoryClick),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.7f))
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("History", style = MaterialTheme.typography.bodyLarge, color = Color.DarkGray)
-                    }
-                }
+
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("© 2025 Base Converter", modifier = Modifier.align(Alignment.CenterHorizontally))
+
+                // Edit/Save Button
+                if (isEditing) {
+                    ButtonWithSlide(
+                        onClick = {
+                            // Save changes to database
+                            databaseManager.updateUserDetails(
+                                username,
+                                editedUsername,
+                                editedEmail,
+                                editedFirstName
+                            )
+                            // Update userDetails to reflect changes
+                            userDetails = Triple(editedUsername, editedEmail, editedFirstName)
+                            isEditing = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentColor,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Text(
+                            "Save",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                } else {
+                    ButtonWithSlide(
+                        onClick = { isEditing = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentColor,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Text(
+                            "Edit Profile",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Logout Button
+                ButtonWithSlide(
+                    onClick = { showLogoutDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentColor,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Text(
+                        "Logout",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Footer
+                Text(
+                    text = "© 2025 Base Converter",
+                    fontSize = 14.sp,
+                    color = TextColor.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 16.dp)
+                )
             }
         }
+    }
+}
+
+@Composable
+fun ButtonWithSlide(
+    onClick: () -> Unit,
+    colors: ButtonColors,
+    shape: RoundedCornerShape,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var isClicked by remember { mutableStateOf(false) }
+    val offsetX by animateFloatAsState(
+        targetValue = if (isClicked) 300f else 0f,
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = FastOutSlowInEasing
+        )
+    )
+
+    LaunchedEffect(isClicked) {
+        if (isClicked) {
+            kotlinx.coroutines.delay(300)
+            onClick()
+            isClicked = false // Reset the state after animation
+        }
+    }
+
+    Button(
+        onClick = { isClicked = true },
+        colors = colors,
+        shape = shape,
+        modifier = modifier
+            .offset(x = offsetX.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun IconButtonWithSlide(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var isClicked by remember { mutableStateOf(false) }
+    val offsetX by animateFloatAsState(
+        targetValue = if (isClicked) 300f else 0f,
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = FastOutSlowInEasing
+        )
+    )
+
+    LaunchedEffect(isClicked) {
+        if (isClicked) {
+            kotlinx.coroutines.delay(300)
+            onClick()
+            isClicked = false // Reset the state after animation
+        }
+    }
+
+    IconButton(
+        onClick = { isClicked = true },
+        modifier = modifier
+            .offset(x = offsetX.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun IconButtonWithFade(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var isClicked by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(
+        targetValue = if (isClicked) 0f else 1f,
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = FastOutSlowInEasing
+        )
+    )
+
+    LaunchedEffect(isClicked) {
+        if (isClicked) {
+            kotlinx.coroutines.delay(300)
+            onClick()
+            isClicked = false // Reset the state after animation
+        }
+    }
+
+    IconButton(
+        onClick = { isClicked = true },
+        modifier = modifier
+            .alpha(alpha)
+    ) {
+        content()
     }
 }
