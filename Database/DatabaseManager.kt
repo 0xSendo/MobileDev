@@ -11,7 +11,7 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
 
     companion object {
         private const val DATABASE_NAME = "BaseConverterDB"
-        private const val DATABASE_VERSION = 4 // Incremented for new tables
+        private const val DATABASE_VERSION = 5 // Incremented for first_name column
         private const val TABLE_USERS = "users"
         private const val TABLE_REQUESTS = "requests"
         private const val TABLE_CONVERSIONS = "conversions"
@@ -20,6 +20,7 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         private const val COLUMN_ID = "id"
         private const val COLUMN_USERNAME = "username"
         private const val COLUMN_EMAIL = "email"
+        private const val COLUMN_FIRST_NAME = "first_name"
         private const val COLUMN_PASSWORD_HASH = "password_hash"
         private const val COLUMN_ROLE = "role"
         // Requests table columns
@@ -53,6 +54,7 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
                 $COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 $COLUMN_USERNAME TEXT NOT NULL UNIQUE,
                 $COLUMN_EMAIL TEXT NOT NULL UNIQUE,
+                $COLUMN_FIRST_NAME TEXT NOT NULL,
                 $COLUMN_PASSWORD_HASH TEXT NOT NULL,
                 $COLUMN_ROLE TEXT NOT NULL
             )
@@ -113,17 +115,10 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         Log.d(TAG, "Upgrading database from version $oldVersion to $newVersion")
-        // Drop all tables and indexes, then recreate
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_USERS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_REQUESTS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_CONVERSIONS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_SESSIONS")
-        db.execSQL("DROP INDEX IF EXISTS idx_username")
-        db.execSQL("DROP INDEX IF EXISTS idx_email")
-        db.execSQL("DROP INDEX IF EXISTS idx_tutor_username")
-        db.execSQL("DROP INDEX IF EXISTS idx_user_username")
-        db.execSQL("DROP INDEX IF EXISTS idx_session_tutor")
-        onCreate(db)
+        if (oldVersion < 5) {
+            // Add first_name column to users table
+            db.execSQL("ALTER TABLE $TABLE_USERS ADD COLUMN $COLUMN_FIRST_NAME TEXT DEFAULT ''")
+        }
         Log.d(TAG, "Database schema upgraded successfully")
     }
 
@@ -132,13 +127,14 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    fun registerUserWithRole(username: String, email: String, password: String, role: String): Pair<Boolean, String> {
+    fun registerUserWithRole(username: String, email: String, firstName: String, password: String, role: String): Pair<Boolean, String> {
         val db = writableDatabase
         return try {
             val hashedPassword = hashPassword(password)
             val values = ContentValues().apply {
                 put(COLUMN_USERNAME, username)
                 put(COLUMN_EMAIL, email)
+                put(COLUMN_FIRST_NAME, firstName)
                 put(COLUMN_PASSWORD_HASH, hashedPassword)
                 put(COLUMN_ROLE, role)
             }
@@ -161,8 +157,8 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    open fun registerUser(username: String, email: String, password: String): Pair<Boolean, String> {
-        return registerUserWithRole(username, email, password, "Student")
+    open fun registerUser(username: String, email: String, firstName: String, password: String): Pair<Boolean, String> {
+        return registerUserWithRole(username, email, firstName, password, "Student")
     }
 
     fun loginUserWithRole(username: String, password: String, role: String): Pair<Boolean, String> {
@@ -178,7 +174,7 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
                 val storedRole = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ROLE))
                 val inputHash = hashPassword(password)
                 val isPasswordCorrect = storedHash == inputHash
-                val isRoleCorrect = role.isEmpty() || storedRole == role // Bypass role check if role is empty
+                val isRoleCorrect = role.isEmpty() || storedRole == role
                 Log.d(TAG, "Login check for $username: Password match: $isPasswordCorrect, Role match: $isRoleCorrect")
                 return Pair(isPasswordCorrect && isRoleCorrect, storedRole)
             }
@@ -194,7 +190,7 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
     }
 
     open fun loginUser(username: String, password: String): Boolean {
-        val (success, _) = loginUserWithRole(username, password, "") // Empty role to bypass role check
+        val (success, _) = loginUserWithRole(username, password, "")
         return success
     }
 
@@ -203,14 +199,14 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         var cursor: android.database.Cursor? = null
         try {
             cursor = db.rawQuery(
-                "SELECT $COLUMN_USERNAME, $COLUMN_EMAIL, $COLUMN_ROLE FROM $TABLE_USERS WHERE $COLUMN_USERNAME = ?",
+                "SELECT $COLUMN_USERNAME, $COLUMN_EMAIL, $COLUMN_FIRST_NAME FROM $TABLE_USERS WHERE $COLUMN_USERNAME = ?",
                 arrayOf(username)
             )
             if (cursor.moveToFirst()) {
                 val userName = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_USERNAME))
                 val email = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_EMAIL))
-                val role = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ROLE))
-                return Triple(userName, email, role)
+                val firstName = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FIRST_NAME))
+                return Triple(userName, email, firstName)
             }
             return null
         } catch (e: Exception) {
@@ -218,6 +214,30 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
             return null
         } finally {
             cursor?.close()
+            db.close()
+        }
+    }
+
+    open fun updateUserDetails(username: String, newUsername: String, email: String, firstName: String): Boolean {
+        val db = writableDatabase
+        try {
+            val values = ContentValues().apply {
+                put(COLUMN_USERNAME, newUsername)
+                put(COLUMN_EMAIL, email)
+                put(COLUMN_FIRST_NAME, firstName)
+            }
+            val rowsAffected = db.update(
+                TABLE_USERS,
+                values,
+                "$COLUMN_USERNAME = ?",
+                arrayOf(username)
+            )
+            Log.d(TAG, "Updated $rowsAffected user records for $username")
+            return rowsAffected > 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update user details for $username: ${e.message}", e)
+            return false
+        } finally {
             db.close()
         }
     }
@@ -342,7 +362,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to get available tutors
     fun getAvailableTutors(): List<String> {
         val db = readableDatabase
         var cursor: android.database.Cursor? = null
@@ -366,7 +385,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to save a conversion
     fun saveConversion(
         username: String,
         inputValue: String,
@@ -394,7 +412,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to get conversion history
     data class ConversionEntry(
         val inputValue: String,
         val inputBase: Int,
@@ -449,7 +466,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to create a session
     fun createSession(
         studentUsername: String,
         tutorUsername: String,
@@ -475,7 +491,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to get sessions for a user (student or tutor)
     data class SessionEntry(
         val studentUsername: String,
         val tutorUsername: String,
@@ -513,7 +528,6 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
-    // New method to update session status
     fun updateSessionStatus(
         studentUsername: String,
         tutorUsername: String,
