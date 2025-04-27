@@ -5,10 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -67,6 +65,7 @@ class LandingPageActivity : ComponentActivity() {
         val intent = Intent(this, BaseConverterActivity::class.java)
         intent.putExtra("logged_in_user", username)
         startActivity(intent)
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
 
@@ -184,7 +183,7 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
     val context = LocalContext.current
     Column(
         modifier = Modifier
-            .width(280.dp) // Fixed width to ensure full off-screen slide
+            .width(280.dp)
             .fillMaxHeight()
             .background(GradientStart)
             .padding(20.dp)
@@ -230,11 +229,12 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
         Divider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Drawer Items
+        // Drawer Items with scale-and-fade animation
         DrawerItem("Profile", Icons.Default.Person) {
             Intent(context, ProfileActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             onClose()
         }
@@ -242,6 +242,7 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             Intent(context, NotesActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             onClose()
         }
@@ -249,6 +250,7 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             Intent(context, HistoryActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             onClose()
         }
@@ -256,6 +258,7 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             (context as? ComponentActivity)?.finish()
             onClose()
@@ -264,12 +267,38 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
 }
 
 @Composable
-fun DrawerItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+fun DrawerItem(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
     var isHovered by remember { mutableStateOf(false) }
+    var isAnimating by remember { mutableStateOf(false) }
+    var animationTrigger by remember { mutableStateOf(0) }
+
+    // Scale animation for hover and press
     val scale by animateFloatAsState(
-        targetValue = if (isHovered) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 200)
+        targetValue = if (isAnimating) 0.9f else if (isHovered) 1.05f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
     )
+
+    // Alpha animation for press
+    val alpha by animateFloatAsState(
+        targetValue = if (isAnimating) 0.5f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+    )
+
+    LaunchedEffect(animationTrigger) {
+        if (animationTrigger > 0) {
+            isAnimating = true
+            // Total animation duration: 400ms (200ms down, 200ms back)
+            kotlinx.coroutines.delay(200)
+            isAnimating = false
+            kotlinx.coroutines.delay(200)
+            onClick()
+        }
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -278,12 +307,13 @@ fun DrawerItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVect
             .background(DrawerItemBackground)
             .clickable(
                 onClick = {
-                    onClick()
+                    animationTrigger++
                     isHovered = false
                 },
                 onClickLabel = "Navigate to $text"
             )
             .scale(scale)
+            .alpha(alpha)
             .shadow(4.dp, RoundedCornerShape(8.dp)),
         color = DrawerItemBackground
     ) {
@@ -325,26 +355,162 @@ fun BottomNavigationBar(username: String) {
             onClick = { /* Already on Home, no action needed */ }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Color.Black) },
-            label = { Text("Profile", color = Color.Black) },
-            selected = false,
-            onClick = {
-                Intent(context, ProfileActivity::class.java).apply {
-                    putExtra("logged_in_user", username)
-                    context.startActivity(this)
+            icon = {
+                var animationTrigger by remember { mutableStateOf(0) }
+                var isAnimating by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.9f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+                val alpha by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.5f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+
+                LaunchedEffect(animationTrigger) {
+                    if (animationTrigger > 0) {
+                        isAnimating = true
+                        kotlinx.coroutines.delay(200)
+                        isAnimating = false
+                        kotlinx.coroutines.delay(200)
+                        Intent(context, ProfileActivity::class.java).apply {
+                            putExtra("logged_in_user", username)
+                            context.startActivity(this)
+                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                        }
+                    }
                 }
-            }
+
+                Row(
+                    modifier = Modifier
+                        .scale(scale)
+                        .alpha(alpha),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = "Profile",
+                        tint = Color.Black,
+                        modifier = Modifier.clickable { animationTrigger++ }
+                    )
+                }
+            },
+            label = {
+                var animationTrigger by remember { mutableStateOf(0) }
+                var isAnimating by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.9f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+                val alpha by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.5f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+
+                LaunchedEffect(animationTrigger) {
+                    if (animationTrigger > 0) {
+                        isAnimating = true
+                        kotlinx.coroutines.delay(200)
+                        isAnimating = false
+                        kotlinx.coroutines.delay(200)
+                        Intent(context, ProfileActivity::class.java).apply {
+                            putExtra("logged_in_user", username)
+                            context.startActivity(this)
+                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                        }
+                    }
+                }
+
+                Text(
+                    "Profile",
+                    color = Color.Black,
+                    modifier = Modifier
+                        .scale(scale)
+                        .alpha(alpha)
+                        .clickable { animationTrigger++ }
+                )
+            },
+            selected = false,
+            onClick = { /* Handled by icon and label */ }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.History, contentDescription = "History", tint = Color.Black) },
-            label = { Text("History", color = Color.Black) },
-            selected = false,
-            onClick = {
-                Intent(context, HistoryActivity::class.java).apply {
-                    putExtra("logged_in_user", username)
-                    context.startActivity(this)
+            icon = {
+                var animationTrigger by remember { mutableStateOf(0) }
+                var isAnimating by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.9f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+                val alpha by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.5f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+
+                LaunchedEffect(animationTrigger) {
+                    if (animationTrigger > 0) {
+                        isAnimating = true
+                        kotlinx.coroutines.delay(200)
+                        isAnimating = false
+                        kotlinx.coroutines.delay(200)
+                        Intent(context, HistoryActivity::class.java).apply {
+                            putExtra("logged_in_user", username)
+                            context.startActivity(this)
+                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                        }
+                    }
                 }
-            }
+
+                Row(
+                    modifier = Modifier
+                        .scale(scale)
+                        .alpha(alpha),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = "History",
+                        tint = Color.Black,
+                        modifier = Modifier.clickable { animationTrigger++ }
+                    )
+                }
+            },
+            label = {
+                var animationTrigger by remember { mutableStateOf(0) }
+                var isAnimating by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.9f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+                val alpha by animateFloatAsState(
+                    targetValue = if (isAnimating) 0.5f else 1f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+                )
+
+                LaunchedEffect(animationTrigger) {
+                    if (animationTrigger > 0) {
+                        isAnimating = true
+                        kotlinx.coroutines.delay(200)
+                        isAnimating = false
+                        kotlinx.coroutines.delay(200)
+                        Intent(context, HistoryActivity::class.java).apply {
+                            putExtra("logged_in_user", username)
+                            context.startActivity(this)
+                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                        }
+                    }
+                }
+
+                Text(
+                    "History",
+                    color = Color.Black,
+                    modifier = Modifier
+                        .scale(scale)
+                        .alpha(alpha)
+                        .clickable { animationTrigger++ }
+                )
+            },
+            selected = false,
+            onClick = { /* Handled by icon and label */ }
         )
     }
 }
@@ -378,7 +544,7 @@ fun HeroSection(onBaseConvertClick: () -> Unit) {
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
+            ButtonWithAnimation(
                 onClick = onBaseConvertClick,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AccentColor,
@@ -389,6 +555,47 @@ fun HeroSection(onBaseConvertClick: () -> Unit) {
                 Text("Start Now", fontSize = 16.sp)
             }
         }
+    }
+}
+
+@Composable
+fun ButtonWithAnimation(
+    onClick: () -> Unit,
+    colors: ButtonColors,
+    shape: RoundedCornerShape,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var animationTrigger by remember { mutableStateOf(0) }
+    var isAnimating by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isAnimating) 0.9f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isAnimating) 0.5f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+    )
+
+    LaunchedEffect(animationTrigger) {
+        if (animationTrigger > 0) {
+            isAnimating = true
+            kotlinx.coroutines.delay(200)
+            isAnimating = false
+            kotlinx.coroutines.delay(200)
+            onClick()
+        }
+    }
+
+    Button(
+        onClick = { animationTrigger++ },
+        colors = colors,
+        shape = shape,
+        modifier = modifier
+            .scale(scale)
+            .alpha(alpha)
+    ) {
+        content()
     }
 }
 
@@ -469,7 +676,7 @@ fun CompactConversionDialog(
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
-                Button(
+                ButtonWithAnimation(
                     onClick = onBaseConvertClick,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentColor,
