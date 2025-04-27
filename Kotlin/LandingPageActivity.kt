@@ -1,10 +1,14 @@
 package com.example.baseconverter
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +42,7 @@ val GradientStart = Color(0xFF800000) // Maroon
 val GradientEnd = Color(0xFFFFFFFF)   // White
 val FrostedBackground = Color.White.copy(alpha = 0.1f)
 val AccentColor = Color(0xFFFFCA28) // Yellow for highlights
+val DrawerItemBackground = Color(0xFF4A0000) // Darker maroon for drawer items
 
 class LandingPageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +76,7 @@ fun LandingPage(
     username: String,
     onBaseConvertClick: () -> Unit
 ) {
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greeting = when (currentHour) {
@@ -84,7 +90,9 @@ fun LandingPage(
         drawerContent = {
             DrawerContent(username = username, onClose = { scope.launch { drawerState.close() } })
         },
-        drawerState = drawerState
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        scrimColor = Color.Black.copy(alpha = 0.5f)
     ) {
         Scaffold(
             topBar = {
@@ -102,7 +110,7 @@ fun LandingPage(
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(
                                 Icons.Default.Menu,
-                                contentDescription = "Open टीमenu",
+                                contentDescription = "Open Menu",
                                 tint = Color.White
                             )
                         }
@@ -173,20 +181,57 @@ fun LandingPage(
 
 @Composable
 fun DrawerContent(username: String, onClose: () -> Unit) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(FrostedBackground)
-            .padding(16.dp)
+            .width(280.dp) // Fixed width to ensure full off-screen slide
+            .fillMaxHeight()
+            .background(GradientStart)
+            .padding(20.dp)
     ) {
-        Text(
-            text = "Menu",
-            style = MaterialTheme.typography.headlineSmall,
-            color = Color.White
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        // Drawer Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    Brush.verticalGradient(listOf(GradientStart, Color(0xFFB00000)))
+                )
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = "User",
+                tint = AccentColor,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f))
+                    .padding(6.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = username,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "Menu",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+        }
+        Divider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Drawer Items
         DrawerItem("Profile", Icons.Default.Person) {
-            val context = LocalContext.current
             Intent(context, ProfileActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
@@ -194,7 +239,6 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             onClose()
         }
         DrawerItem("Notes", Icons.Default.Note) {
-            val context = LocalContext.current
             Intent(context, NotesActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
@@ -202,7 +246,6 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             onClose()
         }
         DrawerItem("History", Icons.Default.History) {
-            val context = LocalContext.current
             Intent(context, HistoryActivity::class.java).apply {
                 putExtra("logged_in_user", username)
                 context.startActivity(this)
@@ -210,7 +253,6 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             onClose()
         }
         DrawerItem("Logout", Icons.Default.ExitToApp) {
-            val context = LocalContext.current
             Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 context.startActivity(this)
@@ -222,21 +264,50 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
 }
 
 @Composable
-fun DrawerItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: @Composable () -> Unit) {
+fun DrawerItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    var isHovered by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (isHovered) 1.05f else 1f,
         animationSpec = tween(durationMillis = 200)
     )
-    ListItem(
-        headlineContent = { Text(text, color = Color.White, fontSize = 16.sp) },
-        leadingContent = {
-            Icon(icon, contentDescription = text, tint = AccentColor)
-        },
+    Surface(
         modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(8.dp))
+            .background(DrawerItemBackground)
+            .clickable(
+                onClick = {
+                    onClick()
+                    isHovered = false
+                },
+                onClickLabel = "Navigate to $text"
+            )
             .scale(scale)
-            .background(FrostedBackground)
-    )
+            .shadow(4.dp, RoundedCornerShape(8.dp)),
+        color = DrawerItemBackground
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = AccentColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = text,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
 }
 
 @Composable
@@ -248,14 +319,14 @@ fun BottomNavigationBar(username: String) {
         contentColor = Color.White
     ) {
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White) },
-            label = { Text("Home", color = Color.White) },
-            selected = true, // Home is the current screen
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.Black) },
+            label = { Text("Home", color = Color.Black) },
+            selected = true,
             onClick = { /* Already on Home, no action needed */ }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Color.White) },
-            label = { Text("Profile", color = Color.White) },
+            icon = { Icon(Icons.Default.Person, contentDescription = "Profile", tint = Color.Black) },
+            label = { Text("Profile", color = Color.Black) },
             selected = false,
             onClick = {
                 Intent(context, ProfileActivity::class.java).apply {
@@ -265,8 +336,8 @@ fun BottomNavigationBar(username: String) {
             }
         )
         NavigationBarItem(
-            icon = { Icon(Icons.Default.History, contentDescription = "History", tint = Color.White) },
-            label = { Text("History", color = Color.White) },
+            icon = { Icon(Icons.Default.History, contentDescription = "History", tint = Color.Black) },
+            label = { Text("History", color = Color.Black) },
             selected = false,
             onClick = {
                 Intent(context, HistoryActivity::class.java).apply {
@@ -361,13 +432,13 @@ fun TestimonialSection() {
                 text = "User Feedback",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.Black
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "\"The smoothest converter app out there!\"",
                 fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.8f),
+                color = Color.Black.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
             )
         }
