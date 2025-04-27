@@ -7,7 +7,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,8 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.baseconverter.ui.theme.BaseConverterTheme
-
 
 class DeveloperActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,7 +31,7 @@ class DeveloperActivity : ComponentActivity() {
             BaseConverterTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = LightPink // Updated to LightPink
+                    color = LightPink
                 ) {
                     DeveloperScreen()
                 }
@@ -46,20 +45,31 @@ fun DeveloperScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(LightPink), // Updated to LightPink
+            .background(LightPink)
+            .padding(16.dp),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top area
+        // Team Icon
+        Image(
+            painter = painterResource(id = R.drawable.ic_launcher_background), // Placeholder for the team icon
+            contentDescription = "Team Icon",
+            modifier = Modifier
+                .size(60.dp)
+                .padding(bottom = 8.dp),
+            contentScale = ContentScale.Fit
+        )
+
+        // Meet the Team Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Maroon) // Updated to Maroon
+                .background(Maroon)
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Meet the Team",
+                text = "MEET THE TEAM",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
@@ -69,8 +79,8 @@ fun DeveloperScreen() {
 
         // Team Members
         TeamMember(
-            profileImage = R.drawable.ic_launcher_background,
-            name = "Cudera, Xianne\n      Jewel S.",
+            profileImage = R.drawable.icon_1,
+            name = "Cudera, Xianne Jewel S.",
             bio = "A 'fake it till you make it' girly and runs by the motto 'it is what it is'.",
             funFact = "Loves sleeping and has a hidden talent for playing the guitar!"
         )
@@ -78,7 +88,7 @@ fun DeveloperScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         TeamMember(
-            profileImage = R.drawable.ic_launcher_background,
+            profileImage = R.drawable.icon_2,
             name = "Daal, Wyben C.",
             bio = "An experienced frontend developer who thrives on solving complex problems and optimizing performance.",
             funFact = "Has a black belt in martial arts and is a coffee connoisseur."
@@ -86,39 +96,66 @@ fun DeveloperScreen() {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Team Vision Section
+        // Vision Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Maroon), // Updated to Maroon
+                .background(Maroon)
+                .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Team Vision",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "\"Innovating the future, one step at a time\"",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
-                    color = Pink, // Updated to Pink for accent
-                    textAlign = TextAlign.Center
-                )
-            }
+            Text(
+                text = "VISION",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Vision Statement
+        Text(
+            text = "\"Innovating the future, one step at a time\"",
+            style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
+            color = Pink,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
             text = "Our team is dedicated to building innovative and user-friendly solutions that make a difference in people's lives. We believe in continuous learning, collaboration, and striving for excellence in everything we do.",
             style = MaterialTheme.typography.bodyLarge,
-            color = DarkGray, // Updated to DarkGray
+            color = DarkGray,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Mission Header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Maroon)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "MISSION",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Mission Statement (Placeholder)
+        Text(
+            text = "To empower users with tools that simplify their lives and foster creativity through technology.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = DarkGray,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -130,33 +167,18 @@ fun TeamMember(profileImage: Int, name: String, bio: String, funFact: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(10.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(LightYellow) // Updated to LightYellow
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Image(
-                painter = painterResource(id = profileImage),
-                contentDescription = "Profile Picture of $name",
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape)
-                    .background(Color.Gray),
-                contentScale = ContentScale.Crop
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                color = Pink // Updated to Pink
-            )
-        }
+        Image(
+            painter = painterResource(id = profileImage),
+            contentDescription = "Profile Picture of $name",
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(Color.Gray),
+            contentScale = ContentScale.Crop
+        )
 
         Spacer(modifier = Modifier.width(16.dp))
 
@@ -164,15 +186,24 @@ fun TeamMember(profileImage: Int, name: String, bio: String, funFact: String) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = bio,
-                style = MaterialTheme.typography.bodyLarge,
-                color = DarkGray // Updated to DarkGray
+                text = name,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = Pink,
+                fontSize = 18.sp
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = bio,
+                style = MaterialTheme.typography.bodyMedium,
+                color = DarkGray,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Fun Fact: $funFact",
-                style = MaterialTheme.typography.bodyMedium,
-                color = DarkGray // Updated to DarkGray
+                style = MaterialTheme.typography.bodySmall,
+                color = DarkGray,
+                fontSize = 12.sp
             )
         }
     }
