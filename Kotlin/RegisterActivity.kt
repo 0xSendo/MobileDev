@@ -68,11 +68,13 @@ class RegisterActivity : ComponentActivity() {
 @Composable
 fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
     var username by remember { mutableStateOf("") }
+    var firstName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var registerMessage by remember { mutableStateOf("") }
     var isUsernameValid by remember { mutableStateOf(true) }
+    var isFirstNameValid by remember { mutableStateOf(true) }
     var isPasswordValid by remember { mutableStateOf(true) }
     var isConfirmPasswordValid by remember { mutableStateOf(true) }
     var isEmailValid by remember { mutableStateOf(true) }
@@ -86,12 +88,17 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
     val LightYellow = Color(0xFFFFF5E4)
     val Maroon = Color(0xFF660000)
     val LightRed = Color(0xFFFFA8A8)
-    val Pink = Color(0xFFFFC1CC) // Assuming Pink from original code
+    val Pink = Color(0xFFFFC1CC)
 
     // Helper function to validate and handle registration (non-composable)
     fun validateAndRegister() {
         if (username.isEmpty()) {
             registerMessage = "Username cannot be empty"
+            return
+        }
+
+        if (firstName.isEmpty()) {
+            registerMessage = "First name cannot be empty"
             return
         }
 
@@ -110,14 +117,14 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
             return
         }
 
-        if (isUsernameValid && isEmailValid && isPasswordValid && isConfirmPasswordValid) {
+        if (isUsernameValid && isFirstNameValid && isEmailValid && isPasswordValid && isConfirmPasswordValid) {
             scope.launch {
                 val (usernameExists, emailExists) = databaseManager.userExists(username, email)
                 when {
                     usernameExists -> registerMessage = "Username already exists"
                     emailExists -> registerMessage = "Email already exists"
                     else -> {
-                        val (success, message) = databaseManager.registerUser(username, email, password)
+                        val (success, message) = databaseManager.registerUser(username, email, firstName, password)
                         registerMessage = if (success) "Registration successful! You can now sign in." else "Registration failed: $message"
                         if (success) {
                             onLoginClick()
@@ -141,8 +148,6 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-
-        // App title at the top
 
         // Registration card
         Card(
@@ -227,6 +232,59 @@ fun RegisterScreen(databaseManager: DatabaseManager, onLoginClick: () -> Unit) {
                     if (!isUsernameValid) {
                         Text(
                             text = "Username cannot be empty",
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+                }
+
+                // First Name field
+                Column {
+                    Text(
+                        text = "First Name",
+                        color = Color.DarkGray,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp, start = 4.dp),
+                        fontSize = 18.sp
+                    )
+
+                    OutlinedTextField(
+                        value = firstName,
+                        onValueChange = {
+                            firstName = it
+                            isFirstNameValid = firstName.isNotEmpty()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        placeholder = { Text("Enter first name") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = LightYellow,
+                            unfocusedContainerColor = Color.White,
+                            errorContainerColor = Color(0xFFFFA07A),
+                            focusedBorderColor = Pink,
+                            unfocusedBorderColor = Color.DarkGray,
+                            cursorColor = Pink,
+                            focusedTextColor = Color.DarkGray,
+                            unfocusedTextColor = Color.DarkGray
+                        ),
+                        isError = !isFirstNameValid,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
+                    )
+
+                    if (!isFirstNameValid) {
+                        Text(
+                            text = "First name cannot be empty",
                             color = Color.Red,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 2.dp)
@@ -493,7 +551,7 @@ fun RegisterScreenPreview() {
                     return Pair(false, false)
                 }
 
-                override fun registerUser(username: String, email: String, password: String): Pair<Boolean, String> {
+                override fun registerUser(username: String, email: String, firstName: String, password: String): Pair<Boolean, String> {
                     return Pair(true, "Success")
                 }
             },
