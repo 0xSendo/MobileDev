@@ -1,6 +1,7 @@
 package com.example.baseconverter
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,18 +16,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import kotlinx.coroutines.delay
 
@@ -61,7 +66,8 @@ class SettingsActivity : ComponentActivity() {
                     SettingsScreen(
                         username = username,
                         onBackClick = { navigateToProfileScreen(username) },
-                        onDeveloperClick = { navigateToDeveloperScreen(username) }
+                        onDeveloperClick = { navigateToDeveloperScreen(username) },
+                        onLogoutConfirmed = { navigateToLoginScreen() }
                     )
                 }
             }
@@ -84,6 +90,14 @@ class SettingsActivity : ComponentActivity() {
         startActivity(intent)
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
+
+    private fun navigateToLoginScreen() {
+        val sharedPreferences = getSharedPreferences("UserSession", MODE_PRIVATE)
+        sharedPreferences.edit().remove("logged_in_user").apply()
+        startActivity(Intent(this, MainActivity::class.java))
+        finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,20 +105,23 @@ class SettingsActivity : ComponentActivity() {
 fun SettingsScreen(
     username: String,
     onBackClick: () -> Unit,
-    onDeveloperClick: () -> Unit
+    onDeveloperClick: () -> Unit,
+    onLogoutConfirmed: () -> Unit
 ) {
     var isDarkThemeEnabled by remember { mutableStateOf(false) }
     var isNotificationsEnabled by remember { mutableStateOf(true) }
     var fontSize by remember { mutableStateOf("Medium") }
     var isFadingOut by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showFontSizeDropdown by remember { mutableStateOf(false) }
 
     // Define colors matching ProfileActivity
     val GradientStart = Color(0xFF800000) // Maroon
     val GradientEnd = Color(0xFFFFFFFF)   // White
-    val CardBackground = Color.White.copy(alpha = 0.1f)
+    val CardBackground = Color.White.copy(alpha = 0.05f) // Higher transparency
     val AccentColor = Color(0xFFFFCA28) // Yellow for highlights
     val TextColor = Color.White
-    // Additional colors from original SettingsActivity
+    // Additional colors for compatibility
     val LightYellow = Color(0xFFFFF5E4)
     val LightPink = Color(0xFFFFC1CC)
     val Pink = Color(0xFFFFC1CC)
@@ -125,6 +142,57 @@ fun SettingsScreen(
         }
     }
 
+    // Logout dialog
+    if (showLogoutDialog) {
+        Dialog(onDismissRequest = { showLogoutDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = CardBackground,
+                modifier = Modifier
+                    .width(280.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Logout Confirmation",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextColor
+                    )
+                    Text(
+                        text = "Are you sure you want to logout?",
+                        fontSize = 14.sp,
+                        color = TextColor.copy(alpha = 0.8f)
+                    )
+                    ButtonWithSlide(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogoutConfirmed()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentColor,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Yes", fontSize = 14.sp)
+                    }
+                    TextButton(
+                        onClick = { showLogoutDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("No", color = AccentColor, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -133,7 +201,7 @@ fun SettingsScreen(
                         "Settings",
                         color = TextColor,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
+                        fontSize = 20.sp
                     )
                 },
                 navigationIcon = {
@@ -160,144 +228,229 @@ fun SettingsScreen(
                     Brush.verticalGradient(listOf(GradientStart, GradientEnd))
                 )
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 // Preferences Section
                 item {
-                    Card(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(8.dp, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = CardBackground)
+                            .background(CardBackground, RoundedCornerShape(12.dp))
+                            .padding(16.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "Preferences",
+                                tint = AccentColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Preferences",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextColor,
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                color = TextColor
                             )
+                        }
 
-                            // Dark Theme Toggle
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Dark Theme",
-                                    fontSize = 16.sp,
-                                    color = TextColor.copy(alpha = 0.8f)
-                                )
-                                Switch(
-                                    checked = isDarkThemeEnabled,
-                                    onCheckedChange = { isDarkThemeEnabled = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = AccentColor,
-                                        checkedTrackColor = AccentColor.copy(alpha = 0.5f),
-                                        uncheckedThumbColor = TextColor,
-                                        uncheckedTrackColor = TextColor.copy(alpha = 0.5f)
+                        // Dark Theme Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Dark Theme",
+                                fontSize = 16.sp,
+                                color = TextColor.copy(alpha = 0.9f)
+                            )
+                            AnimatedSwitch(
+                                checked = isDarkThemeEnabled,
+                                onCheckedChange = { isDarkThemeEnabled = it },
+                                accentColor = AccentColor,
+                                textColor = TextColor
+                            )
+                        }
+
+                        // Notifications Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Enable Notifications",
+                                fontSize = 16.sp,
+                                color = TextColor.copy(alpha = 0.9f)
+                            )
+                            AnimatedSwitch(
+                                checked = isNotificationsEnabled,
+                                onCheckedChange = { isNotificationsEnabled = it },
+                                accentColor = AccentColor,
+                                textColor = TextColor
+                            )
+                        }
+
+                        // Font Size Selector
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Font Size",
+                                fontSize = 16.sp,
+                                color = TextColor.copy(alpha = 0.9f)
+                            )
+                            Box {
+                                TextButton(
+                                    onClick = { showFontSizeDropdown = true },
+                                    modifier = Modifier.padding(end = 8.dp)
+                                ) {
+                                    Text(
+                                        text = fontSize,
+                                        fontSize = 16.sp,
+                                        color = AccentColor
                                     )
-                                )
-                            }
-
-                            // Notifications Toggle
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Enable Notifications",
-                                    fontSize = 16.sp,
-                                    color = TextColor.copy(alpha = 0.8f)
-                                )
-                                Switch(
-                                    checked = isNotificationsEnabled,
-                                    onCheckedChange = { isNotificationsEnabled = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = AccentColor,
-                                        checkedTrackColor = AccentColor.copy(alpha = 0.5f),
-                                        uncheckedThumbColor = TextColor,
-                                        uncheckedTrackColor = TextColor.copy(alpha = 0.5f)
-                                    )
-                                )
-                            }
-
-                            // Font Size (Placeholder)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Font Size",
-                                    fontSize = 16.sp,
-                                    color = TextColor.copy(alpha = 0.8f)
-                                )
-                                Text(
-                                    text = fontSize,
-                                    fontSize = 16.sp,
-                                    color = AccentColor
-                                )
+                                }
+                                DropdownMenu(
+                                    expanded = showFontSizeDropdown,
+                                    onDismissRequest = { showFontSizeDropdown = false }
+                                ) {
+                                    listOf("Small", "Medium", "Large").forEach { size ->
+                                        DropdownMenuItem(
+                                            text = { Text(size, color = TextColor) },
+                                            onClick = {
+                                                fontSize = size
+                                                showFontSizeDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                    Divider(
+                        color = TextColor.copy(alpha = 0.2f),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
                 }
 
                 // About Developer Section
                 item {
-                    Card(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(8.dp, RoundedCornerShape(16.dp)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = CardBackground)
+                            .background(CardBackground, RoundedCornerShape(12.dp))
+                            .padding(16.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = "Developer",
+                                tint = AccentColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "About Developer",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextColor,
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                color = TextColor
                             )
+                        }
+                        Text(
+                            text = "Learn more about the developer behind this app.",
+                            fontSize = 14.sp,
+                            color = TextColor.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        ButtonWithSlide(
+                            onClick = onDeveloperClick,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AccentColor,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
                             Text(
-                                text = "Learn more about the developer behind this app.",
+                                text = "View Developer Info",
                                 fontSize = 16.sp,
-                                color = TextColor.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                fontWeight = FontWeight.SemiBold
                             )
-                            ButtonWithSlide(
-                                onClick = onDeveloperClick,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = AccentColor,
-                                    contentColor = Color.Black
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                            ) {
-                                Text(
-                                    text = "View Developer Info",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                        }
+                    }
+                    Divider(
+                        color = TextColor.copy(alpha = 0.2f),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+
+                // Account Section (Logout)
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(CardBackground, RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.ExitToApp,
+                                contentDescription = "Account",
+                                tint = AccentColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Account",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextColor
+                            )
+                        }
+                        ButtonWithSlide(
+                            onClick = { showLogoutDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AccentColor,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Text(
+                                text = "Logout",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -316,14 +469,28 @@ fun SettingsScreen(
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun SettingsScreenPreview() {
-    BaseConverterTheme(darkTheme = true) {
-        SettingsScreen(
-            username = "PreviewUser",
-            onBackClick = {},
-            onDeveloperClick = {}
-        )
-    }
+fun AnimatedSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    accentColor: Color,
+    textColor: Color
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (checked) 1.1f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "switch_scale"
+    )
+
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = accentColor,
+            checkedTrackColor = accentColor.copy(alpha = 0.5f),
+            uncheckedThumbColor = textColor,
+            uncheckedTrackColor = textColor.copy(alpha = 0.5f)
+        ),
+        modifier = Modifier.scale(scale)
+    )
 }
