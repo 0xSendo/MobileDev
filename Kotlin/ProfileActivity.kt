@@ -91,13 +91,18 @@ class ProfileActivity : ComponentActivity() {
     }
 
     private fun navigateToLoginScreen() {
+        val sharedPreferences = getSharedPreferences("UserSession", MODE_PRIVATE)
+        sharedPreferences.edit().remove("logged_in_user").apply()
         startActivity(Intent(this, MainActivity::class.java))
         finish()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
     private fun navigateToLandingScreen() {
-        startActivity(Intent(this, LandingPageActivity::class.java))
+        val intent = Intent(this, LandingPageActivity::class.java).apply {
+            putExtra("logged_in_user", intent.getStringExtra("logged_in_user") ?: "User")
+        }
+        startActivity(intent)
         finish()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
