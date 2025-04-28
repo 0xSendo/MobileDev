@@ -2,10 +2,15 @@ package com.example.baseconverter
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.OnBackPressedCallback
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,12 +20,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -29,46 +42,119 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat.getSystemService
 import com.example.baseconverter.ui.theme.BaseConverterTheme
+import kotlinx.coroutines.delay
 import java.lang.NumberFormatException
-import android.content.SharedPreferences
-import androidx.compose.ui.graphics.Color.Companion.DarkGray
 
-// Define custom colors
-val Maroon = Color(0xFF660000)
-val LightPink = Color(0xFFFFF5E4)
-val Pink = Color(0xFFFFC4C4)
-val LightYellow = Color(0xFFFFFBE6)
+val TextColor = Color.White
+val ErrorColor = Color(0xFFFF6666) // Soft red for errors
 
 class BaseConverterActivity : ComponentActivity() {
+    private var backPressedTime: Long = 0
+    private val BACK_PRESS_INTERVAL = 2000L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            BaseConverterTheme(darkTheme = true) {
-                BaseConverterScreen(onBackClick = { finish() })
+        val username = intent.getStringExtra("logged_in_user") ?: "Unknown"
+
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - backPressedTime <= BACK_PRESS_INTERVAL) {
+                    navigateToLandingPage(username)
+                } else {
+                    backPressedTime = currentTime
+                    Toast.makeText(this@BaseConverterActivity, "Press back again to return to Profile", Toast.LENGTH_SHORT).show()
+                }
             }
         }
+        onBackPressedDispatcher.addCallback(this, callback)
+
+        setContent {
+            BaseConverterTheme(darkTheme = true) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Transparent
+                ) {
+                    BaseConverterScreen(
+                        username = username,
+                        onBackClick = { navigateToLandingPage(username) },
+                        databaseManager = DatabaseManager(this)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun navigateToLandingPage(username: String) {
+        val intent = Intent(this, LandingPageActivity::class.java).apply {
+            putExtra("logged_in_user", username)
+        }
+        startActivity(intent)
+        finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BaseConverterScreen(onBackClick: () -> Unit) {
+fun BaseConverterScreen(
+    username: String,
+    onBackClick: () -> Unit,
+    databaseManager: DatabaseManager
+) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("ConversionHistory", Context.MODE_PRIVATE)
-    var inputNumber by remember { mutableStateOf("") }
-    var selectedConversion by remember { mutableStateOf("Decimal to Octal") }
-    var result by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
+    var inputNumber by rememberSaveable { mutableStateOf("") }
+    var selectedConversion by rememberSaveable { mutableStateOf("Decimal to Binary") }
+    var result by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
+    var showBaseInfo by remember { mutableStateOf(false) }
+    var isFadingOut by remember { mutableStateOf(false) }
     val history = remember { mutableStateListOf<String>() }
 
-    // Load history from SharedPreferences
-    LaunchedEffect(Unit) {
-        val savedHistory = prefs.getStringSet("history", emptySet())?.toList() ?: emptyList()
-        history.addAll(savedHistory)
+    // Input validation function
+    fun isValidInput(input: String, base: String): Boolean {
+        if (input.isBlank()) return true
+        return try {
+            when (base) {
+                "Decimal" -> input.all { it.isDigit() } && input.toLong() >= 0
+                "Binary" -> input.all { it == '0' || it == '1' }
+                "Octal" -> input.all { it in '0'..'7' }
+                "Hexadecimal" -> input.all { it.isDigit() || it in 'A'..'F' || it in 'a'..'f' }
+                else -> false
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 
-    // Conversion options
+    // Input validation state using derivedStateOf
+    val isValidInput by remember(inputNumber, selectedConversion) {
+        derivedStateOf {
+            isValidInput(inputNumber, selectedConversion.split(" ")[0])
+        }
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (isFadingOut) 0f else 1f,
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "fade_animation"
+    )
+
+    LaunchedEffect(isFadingOut) {
+        if (isFadingOut) {
+            delay(300)
+            onBackClick()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val dbHistory = databaseManager.getConversionHistory(username)
+        history.clear()
+        history.addAll(dbHistory.map { "${it.inputValue} (Base ${it.inputBase}) → ${it.outputValue} (Base ${it.outputBase})" })
+    }
+
     val conversions = listOf(
         "Decimal to Binary", "Decimal to Octal", "Decimal to Hexadecimal",
         "Binary to Decimal", "Binary to Octal", "Binary to Hexadecimal",
@@ -76,18 +162,6 @@ fun BaseConverterScreen(onBackClick: () -> Unit) {
         "Hexadecimal to Decimal", "Hexadecimal to Binary", "Hexadecimal to Octal"
     )
 
-    // Input validation for each base
-    fun isValidInput(input: String, base: String): Boolean {
-        return when (base) {
-            "Decimal" -> input.all { it.isDigit() }
-            "Binary" -> input.all { it == '0' || it == '1' }
-            "Octal" -> input.all { it in '0'..'7' }
-            "Hexadecimal" -> input.all { it.isDigit() || it in 'A'..'F' || it in 'a'..'f' }
-            else -> false
-        }
-    }
-
-    // Function to perform conversion
     fun convertNumber() {
         if (inputNumber.isBlank()) {
             result = ""
@@ -103,27 +177,36 @@ fun BaseConverterScreen(onBackClick: () -> Unit) {
         }
 
         try {
-            // Step 1: Convert input to decimal (Long)
-            val decimalValue = when (fromBaseStr) {
-                "Decimal" -> inputNumber.toLong(10)
-                "Binary" -> inputNumber.toLong(2)
-                "Octal" -> inputNumber.toLong(8)
-                "Hexadecimal" -> inputNumber.toLong(16)
+            val fromBase = when (fromBaseStr) {
+                "Decimal" -> 10
+                "Binary" -> 2
+                "Octal" -> 8
+                "Hexadecimal" -> 16
                 else -> throw IllegalArgumentException("Unknown base: $fromBaseStr")
             }
-
-            // Step 2: Convert decimal to target base
-            result = when (toBaseStr) {
-                "Decimal" -> decimalValue.toString(10)
-                "Binary" -> decimalValue.toString(2)
-                "Octal" -> decimalValue.toString(8)
-                "Hexadecimal" -> decimalValue.toString(16).uppercase()
+            val toBase = when (toBaseStr) {
+                "Decimal" -> 10
+                "Binary" -> 2
+                "Octal" -> 8
+                "Hexadecimal" -> 16
                 else -> throw IllegalArgumentException("Unknown base: $toBaseStr")
             }
 
+            val decimalValue = inputNumber.toLong(fromBase)
+            result = when (toBase) {
+                16 -> decimalValue.toString(16).uppercase()
+                else -> decimalValue.toString(toBase)
+            }
+
             errorMessage = ""
-            // Add to history
-            val conversionEntry = "$inputNumber ($fromBaseStr) → $result ($toBaseStr)"
+            databaseManager.saveConversion(
+                username = username,
+                inputValue = inputNumber,
+                inputBase = fromBase,
+                outputValue = result,
+                outputBase = toBase
+            )
+            val conversionEntry = "$inputNumber (Base $fromBase) → $result (Base $toBase)"
             if (!history.contains(conversionEntry)) {
                 history.add(0, conversionEntry)
                 if (history.size > 10) history.removeAt(history.size - 1)
@@ -141,151 +224,289 @@ fun BaseConverterScreen(onBackClick: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Base Converter", color = Color.White) },
+                title = {
+                    Text(
+                        "Base Converter",
+                        color = TextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
+                    IconButton(onClick = { isFadingOut = true }) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = TextColor
+                        )
                     }
                 },
                 actions = {
                     TextButton(onClick = { showHistory = true }) {
-                        Text("History", color = Pink)
+                        Text("History", color = AccentColor, fontSize = 16.sp)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Maroon)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        }
+        },
+        containerColor = Color.Transparent,
+        modifier = Modifier.alpha(alpha)
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(LightPink)
+                .background(Brush.verticalGradient(listOf(GradientStart, GradientEnd)))
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 12.dp, vertical = 12.dp)
         ) {
-            // Input and Conversion Selection
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = LightYellow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedTextField(
-                        value = inputNumber,
-                        onValueChange = {
-                            inputNumber = it
-                            convertNumber()
-                        },
-                        label = { Text("Enter ${selectedConversion.split(" ")[0]} Number", color = DarkGray) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedBorderColor = Pink,
-                            unfocusedBorderColor = DarkGray,
-                            cursorColor = Pink,
-                            focusedTextColor = DarkGray,
-                            unfocusedTextColor = DarkGray
-                        ),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = when (selectedConversion.split(" ")[0]) {
-                                "Hexadecimal" -> KeyboardType.Text
-                                else -> KeyboardType.Number
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(FrostedBackground, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Input",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextColor
+                            )
+                            IconButton(onClick = { showBaseInfo = true }) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = "Base Info",
+                                    tint = AccentColor
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = inputNumber,
+                            onValueChange = {
+                                inputNumber = it
+                                convertNumber()
+                            },
+                            label = { Text("${selectedConversion.split(" ")[0]} Number", color = TextColor.copy(alpha = 0.7f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(
+                                        when (selectedConversion.split(" ")[0]) {
+                                            "Decimal" -> R.drawable.ic_decimal
+                                            "Binary" -> R.drawable.ic_binary
+                                            "Octal" -> R.drawable.ic_octal
+                                            "Hexadecimal" -> R.drawable.ic_hex
+                                            else -> R.drawable.ic_decimal
+                                        }
+                                    ),
+                                    contentDescription = null,
+                                    tint = AccentColor
+                                )
+                            },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = FrostedBackground,
+                                unfocusedContainerColor = FrostedBackground,
+                                disabledContainerColor = FrostedBackground,
+                                focusedIndicatorColor = if (isValidInput) AccentColor else ErrorColor,
+                                unfocusedIndicatorColor = if (isValidInput) TextColor.copy(alpha = 0.5f) else ErrorColor,
+                                cursorColor = AccentColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = AccentColor,
+                                unfocusedLabelColor = TextColor.copy(alpha = 0.7f)
+                            ),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = when (selectedConversion.split(" ")[0]) {
+                                    "Hexadecimal" -> KeyboardType.Text
+                                    else -> KeyboardType.Number
+                                }
+                            )
+                        )
+
+                        ConversionSelector(
+                            selectedConversion = selectedConversion,
+                            conversions = conversions,
+                            onConversionChange = {
+                                selectedConversion = it
+                                convertNumber()
                             }
                         )
-                    )
 
-                    ConversionSelector(
-                        selectedConversion = selectedConversion,
-                        conversions = conversions,
-                        onConversionChange = {
-                            selectedConversion = it
-                            convertNumber()
-                        }
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Button(
-                            onClick = { inputNumber = ""; result = ""; errorMessage = "" },
-                            colors = ButtonDefaults.buttonColors(containerColor = Maroon),
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("Clear", color = Color.White)
+                            listOf("Decimal to Binary", "Binary to Decimal", "Decimal to Hexadecimal").forEach { preset ->
+                                FilterChip(
+                                    selected = selectedConversion == preset,
+                                    onClick = {
+                                        selectedConversion = preset
+                                        convertNumber()
+                                    },
+                                    label = { Text(preset, fontSize = 14.sp, color = TextColor) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AccentColor.copy(alpha = 0.3f),
+                                        selectedLabelColor = TextColor,
+                                        containerColor = FrostedBackground,
+                                        labelColor = TextColor.copy(alpha = 0.7f)
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = { inputNumber = ""; result = ""; errorMessage = "" },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentColor,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_clear),
+                                        contentDescription = "Clear",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Clear", fontSize = 14.sp)
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val clipboard = getSystemService(context, ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Input", inputNumber))
+                                    Toast.makeText(context, "Input copied!", Toast.LENGTH_SHORT).show()
+                                },
+                                enabled = inputNumber.isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AccentColor,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copy Input",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy", fontSize = 14.sp)
+                                }
+                            }
                         }
                         Button(
                             onClick = {
+                                val (fromBase, toBase) = selectedConversion.split(" to ")
+                                val swapped = "$toBase to $fromBase"
+                                if (conversions.contains(swapped)) {
+                                    selectedConversion = swapped
+                                    convertNumber()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AccentColor,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.SwapHoriz,
+                                    contentDescription = "Swap Bases",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Swap Bases", fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(FrostedBackground, RoundedCornerShape(12.dp))
+                            .clickable(enabled = result.isNotEmpty()) {
                                 val clipboard = getSystemService(context, ClipboardManager::class.java)
                                 clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Result", result))
                                 Toast.makeText(context, "Result copied!", Toast.LENGTH_SHORT).show()
-                            },
-                            enabled = result.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Maroon),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Copy Result", color = Color.White)
+                            }
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "${selectedConversion.split(" to ")[1]} Result",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextColor
+                        )
+                        Text(
+                            text = result.ifEmpty { "—" },
+                            fontSize = 26.sp,
+                            color = TextColor,
+                            modifier = Modifier.padding(top = 6.dp),
+                            maxLines = 1
+                        )
+                        if (errorMessage.isNotEmpty()) {
+                            Text(
+                                text = errorMessage,
+                                color = ErrorColor,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(top = 6.dp),
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
             }
 
-            // Result Display
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = LightYellow),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "${selectedConversion.split(" to ")[1]} Result",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Pink
-                    )
-                    Text(
-                        text = result.ifEmpty { "—" },
-                        fontSize = 32.sp,
-                        color = DarkGray,
-                        modifier = Modifier.padding(top = 8.dp),
-                        maxLines = 1
-                    )
-                    if (errorMessage.isNotEmpty()) {
-                        Text(
-                            text = errorMessage,
-                            color = Color.Red,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 8.dp),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "© 2025 Base Converter",
+                fontSize = 12.sp,
+                color = TextColor.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+            )
         }
 
-        // History Dialog
         if (showHistory) {
             AlertDialog(
                 onDismissRequest = { showHistory = false },
-                title = { Text("Conversion History", color = Pink) },
+                title = { Text("Conversion History", color = AccentColor, fontSize = 18.sp) },
                 text = {
                     if (history.isEmpty()) {
-                        Text("No conversions yet", color = DarkGray)
+                        Text("No conversions yet", color = TextColor.copy(alpha = 0.7f))
                     } else {
-                        LazyColumn {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 280.dp)
+                        ) {
                             items(history) { entry ->
                                 Text(
                                     text = entry,
-                                    color = DarkGray,
+                                    color = TextColor,
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 )
                             }
@@ -293,11 +514,52 @@ fun BaseConverterScreen(onBackClick: () -> Unit) {
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showHistory = false }) {
-                        Text("Close", color = Pink)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                prefs.edit().clear().apply()
+                                databaseManager.clearConversionHistory(username)
+                                history.clear()
+                            }
+                        ) {
+                            Text("Clear History", color = AccentColor, fontSize = 14.sp)
+                        }
+                        TextButton(onClick = { showHistory = false }) {
+                            Text("Close", color = AccentColor, fontSize = 14.sp)
+                        }
                     }
                 },
-                containerColor = LightYellow
+                containerColor = FrostedBackground,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+            )
+        }
+
+        if (showBaseInfo) {
+            AlertDialog(
+                onDismissRequest = { showBaseInfo = false },
+                title = { Text("${selectedConversion.split(" ")[0]} Base", color = AccentColor, fontSize = 18.sp) },
+                text = {
+                    Text(
+                        text = when (selectedConversion.split(" ")[0]) {
+                            "Decimal" -> "Decimal (Base 10) uses digits 0-9."
+                            "Binary" -> "Binary (Base 2) uses digits 0 and 1."
+                            "Octal" -> "Octal (Base 8) uses digits 0-7."
+                            "Hexadecimal" -> "Hexadecimal (Base 16) uses digits 0-9 and letters A-F."
+                            else -> "Unknown base."
+                        },
+                        color = TextColor,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showBaseInfo = false }) {
+                        Text("Close", color = AccentColor, fontSize = 14.sp)
+                    }
+                },
+                containerColor = FrostedBackground,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
             )
         }
     }
@@ -319,28 +581,33 @@ fun ConversionSelector(
         OutlinedTextField(
             value = selectedConversion,
             onValueChange = {},
-            label = { Text("Conversion Type", color = DarkGray) },
+            label = { Text("Conversion Type", color = TextColor.copy(alpha = 0.7f)) },
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth(),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = Pink,
-                unfocusedBorderColor = DarkGray,
-                cursorColor = Pink,
-                focusedTextColor = DarkGray,
-                unfocusedTextColor = DarkGray
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = FrostedBackground,
+                unfocusedContainerColor = FrostedBackground,
+                disabledContainerColor = FrostedBackground,
+                focusedIndicatorColor = AccentColor,
+                unfocusedIndicatorColor = TextColor.copy(alpha = 0.5f),
+                cursorColor = AccentColor,
+                focusedTextColor = TextColor,
+                unfocusedTextColor = TextColor,
+                focusedLabelColor = AccentColor,
+                unfocusedLabelColor = TextColor.copy(alpha = 0.7f)
             )
         )
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(LightYellow)
+            modifier = Modifier.background(FrostedBackground)
         ) {
             conversions.forEach { conversion ->
                 DropdownMenuItem(
-                    text = { Text(conversion, color = DarkGray) },
+                    text = { Text(conversion, color = TextColor, fontSize = 14.sp) },
                     onClick = {
                         onConversionChange(conversion)
                         expanded = false
@@ -355,6 +622,16 @@ fun ConversionSelector(
 @Composable
 fun BaseConverterPreview() {
     BaseConverterTheme(darkTheme = true) {
-        BaseConverterScreen(onBackClick = {})
+        BaseConverterScreen(
+            username = "PreviewUser",
+            onBackClick = {},
+            databaseManager = object : DatabaseManager(null) {
+                override fun saveConversion(username: String, inputValue: String, inputBase: Int, outputValue: String, outputBase: Int): Boolean = true
+                override fun getConversionHistory(username: String): List<ConversionEntry> = listOf(
+                    ConversionEntry("123", 10, "7B", 16, System.currentTimeMillis())
+                )
+                override fun clearConversionHistory(username: String): Boolean = true
+            }
+        )
     }
 }
