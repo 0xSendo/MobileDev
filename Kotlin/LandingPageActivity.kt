@@ -3,7 +3,9 @@ package com.example.baseconverter
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -43,15 +45,41 @@ val AccentColor = Color(0xFFFFCA28) // Yellow for highlights
 val DrawerItemBackground = Color(0xFF4A0000) // Darker maroon for drawer items
 
 class LandingPageActivity : ComponentActivity() {
+    private var backPressedTime: Long = 0
+    private val BACK_PRESS_INTERVAL = 2000L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Handle device back button with double-press logic
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - backPressedTime <= BACK_PRESS_INTERVAL) {
+                    finishAffinity() // Exit the app
+                } else {
+                    backPressedTime = currentTime
+                    Toast.makeText(this@LandingPageActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, callback)
+
         setContent {
             BaseConverterTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent
                 ) {
-                    val username = intent.getStringExtra("logged_in_user") ?: "User"
+                    val sharedPreferences = getSharedPreferences("UserSession", MODE_PRIVATE)
+                    var username = intent.getStringExtra("logged_in_user")
+                        ?: sharedPreferences.getString("logged_in_user", null)
+                    // Fallback to database if username is still null
+                    if (username == null) {
+                        val databaseManager = DatabaseManager(this@LandingPageActivity)
+                        // Assuming you have a method to get the first user or a default
+                        username = databaseManager.getAnyUser()?.first ?: "User"
+                    }
                     LandingPage(
                         username = username,
                         onBaseConvertClick = { navigateToBaseConverter(username) }
@@ -249,8 +277,8 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
         DrawerItem("History", Icons.Default.History) {
             Intent(context, HistoryActivity::class.java).apply {
                 putExtra("logged_in_user", username)
-                context.startActivity(this)
-                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    context.startActivity(this)
+                    (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
             onClose()
         }
