@@ -10,9 +10,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,7 +26,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -44,6 +40,9 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.rememberAsyncImagePainter
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import android.util.Log
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 
 class ProfileActivity : ComponentActivity() {
     private lateinit var databaseManager: DatabaseManager
@@ -82,7 +81,7 @@ class ProfileActivity : ComponentActivity() {
                         databaseManager = databaseManager,
                         sharedPreferences = sharedPreferences,
                         onLogoutConfirmed = { navigateToLoginScreen() },
-                        onBackClick = { navigateToLandingScreen() },
+                        onBackClick = { navigateToLandingScreen(username) },
                         onSettingsClick = { navigateToSettingsScreen(username) }
                     )
                 }
@@ -98,9 +97,9 @@ class ProfileActivity : ComponentActivity() {
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
-    private fun navigateToLandingScreen() {
+    private fun navigateToLandingScreen(username: String) {
         val intent = Intent(this, LandingPageActivity::class.java).apply {
-            putExtra("logged_in_user", intent.getStringExtra("logged_in_user") ?: "User")
+            putExtra("logged_in_user", username)
         }
         startActivity(intent)
         finish()
@@ -577,42 +576,6 @@ fun ProfileScreen(
 }
 
 @Composable
-fun ButtonWithSlide(
-    onClick: () -> Unit,
-    colors: ButtonColors,
-    shape: RoundedCornerShape,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    var isClicked by remember { mutableStateOf(false) }
-    val offsetX by animateFloatAsState(
-        targetValue = if (isClicked) 300f else 0f,
-        animationSpec = tween(
-            durationMillis = 300,
-            easing = FastOutSlowInEasing
-        )
-    )
-
-    LaunchedEffect(isClicked) {
-        if (isClicked) {
-            kotlinx.coroutines.delay(300)
-            onClick()
-            isClicked = false // Reset the state after animation
-        }
-    }
-
-    Button(
-        onClick = { isClicked = true },
-        colors = colors,
-        shape = shape,
-        modifier = modifier
-            .offset(x = offsetX.dp)
-    ) {
-        content()
-    }
-}
-
-@Composable
 fun IconButtonWithSlide(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -624,7 +587,8 @@ fun IconButtonWithSlide(
         animationSpec = tween(
             durationMillis = 300,
             easing = FastOutSlowInEasing
-        )
+        ),
+        label = "slide_animation"
     )
 
     LaunchedEffect(isClicked) {
@@ -637,40 +601,7 @@ fun IconButtonWithSlide(
 
     IconButton(
         onClick = { isClicked = true },
-        modifier = modifier
-            .offset(x = offsetX.dp)
-    ) {
-        content()
-    }
-}
-
-@Composable
-fun IconButtonWithFade(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    var isClicked by remember { mutableStateOf(false) }
-    val alpha by animateFloatAsState(
-        targetValue = if (isClicked) 0f else 1f,
-        animationSpec = tween(
-            durationMillis = 300,
-            easing = FastOutSlowInEasing
-        )
-    )
-
-    LaunchedEffect(isClicked) {
-        if (isClicked) {
-            kotlinx.coroutines.delay(300)
-            onClick()
-            isClicked = false // Reset the state after animation
-        }
-    }
-
-    IconButton(
-        onClick = { isClicked = true },
-        modifier = modifier
-            .alpha(alpha)
+        modifier = modifier.offset(x = offsetX.dp)
     ) {
         content()
     }
