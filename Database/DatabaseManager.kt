@@ -466,6 +466,30 @@ open class DatabaseManager(context: Context?) : SQLiteOpenHelper(context, DATABA
         }
     }
 
+    fun getAnyUser(): Triple<String, String, String>? {
+        val db = readableDatabase
+        var cursor: android.database.Cursor? = null
+        try {
+            cursor = db.rawQuery(
+                "SELECT $COLUMN_USERNAME, $COLUMN_EMAIL, $COLUMN_FIRST_NAME FROM $TABLE_USERS LIMIT 1",
+                null
+            )
+            if (cursor.moveToFirst()) {
+                val userName = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_USERNAME))
+                val email = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_EMAIL))
+                val firstName = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FIRST_NAME))
+                return Triple(userName, email, firstName)
+            }
+            return null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get any user: ${e.message}", e)
+            return null
+        } finally {
+            cursor?.close()
+            db.close()
+        }
+    }
+
     fun createSession(
         studentUsername: String,
         tutorUsername: String,
