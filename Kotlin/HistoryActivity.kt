@@ -1,9 +1,14 @@
 package com.example.baseconverter
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.OnBackPressedCallback
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,17 +20,38 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.baseconverter.ui.theme.BaseConverterTheme
+import kotlinx.coroutines.delay
 
 class HistoryActivity : ComponentActivity() {
+    private var backPressedTime: Long = 0
+    private val BACK_PRESS_INTERVAL = 2000L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val username = intent.getStringExtra("logged_in_user") ?: "Unknown"
+        val databaseManager = DatabaseManager(this)
+
+        // Handle device back button with double-press logic
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - backPressedTime <= BACK_PRESS_INTERVAL) {
+                    finishAffinity() // Exit the app
+                } else {
+                    backPressedTime = currentTime
+                    Toast.makeText(this@HistoryActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, callback)
+
         setContent {
             BaseConverterTheme(darkTheme = true) {
                 Surface(
@@ -34,12 +60,21 @@ class HistoryActivity : ComponentActivity() {
                 ) {
                     HistoryScreen(
                         username = username,
-                        onBackClick = { onBackPressedDispatcher.onBackPressed() },
-                        databaseManager = DatabaseManager(this)
+                        onBackClick = { navigateToLandingScreen(username) },
+                        databaseManager = databaseManager
                     )
                 }
             }
         }
+    }
+
+    private fun navigateToLandingScreen(username: String) {
+        val intent = Intent(this, LandingPageActivity::class.java).apply {
+            putExtra("logged_in_user", username)
+        }
+        startActivity(intent)
+        finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
 
@@ -51,12 +86,28 @@ fun HistoryScreen(
     databaseManager: DatabaseManager
 ) {
     val historyList = remember { mutableStateListOf<DatabaseManager.ConversionEntry>() }
+    var isFadingOut by remember { mutableStateOf(false) }
 
     // Colors matching your theme
     val LightYellow = Color(0xFFFFF5E4)
     val Maroon = Color(0xFF660000)
     val LightRed = Color(0xFFFFA8A8)
     val Pink = Color(0xFFFFC1CC)
+
+    // Animation for fade-out
+    val alpha by animateFloatAsState(
+        targetValue = if (isFadingOut) 0f else 1f,
+        animationSpec = tween(durationMillis = 300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "fade_animation"
+    )
+
+    // Trigger navigation after fade-out
+    LaunchedEffect(isFadingOut) {
+        if (isFadingOut) {
+            delay(300) // Match animation duration
+            onBackClick()
+        }
+    }
 
     // Fetch conversion history with error handling
     LaunchedEffect(Unit) {
@@ -76,13 +127,16 @@ fun HistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Conversion History", color = Color.DarkGray) },
+                title = { Text("Conversion History", color = Color.White) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = { isFadingOut = true },
+                        modifier = Modifier.alpha(alpha)
+                    ) {
                         Icon(
                             Icons.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Maroon
+                            tint = Color.White
                         )
                     }
                 },
@@ -98,14 +152,15 @@ fun HistoryScreen(
                         Text("Delete All", color = Pink)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White.copy(alpha = 0.7f))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF800000).copy(alpha = 1f))
             )
-        }
+        },
+        modifier = Modifier.alpha(alpha) // Apply fade animation to entire scaffold
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Gray) // Placeholder background
+                .background(color = LightYellow.copy(alpha = 1.5f)) // Placeholder background
         ) {
             Column(
                 modifier = Modifier
