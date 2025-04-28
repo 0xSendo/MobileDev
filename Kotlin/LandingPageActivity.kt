@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -33,11 +32,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.zIndex
+import com.airbnb.lottie.compose.*
 import com.example.baseconverter.ui.theme.BaseConverterTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.*
 
-// Define colors for the new design
+// Use the specified color theme
 val GradientStart = Color(0xFF800000) // Maroon
 val GradientEnd = Color(0xFFFFFFFF)   // White
 val FrostedBackground = Color.White.copy(alpha = 0.1f)
@@ -51,12 +56,11 @@ class LandingPageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Handle device back button with double-press logic
         val callback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - backPressedTime <= BACK_PRESS_INTERVAL) {
-                    finishAffinity() // Exit the app
+                    finishAffinity()
                 } else {
                     backPressedTime = currentTime
                     Toast.makeText(this@LandingPageActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
@@ -74,10 +78,8 @@ class LandingPageActivity : ComponentActivity() {
                     val sharedPreferences = getSharedPreferences("UserSession", MODE_PRIVATE)
                     var username = intent.getStringExtra("logged_in_user")
                         ?: sharedPreferences.getString("logged_in_user", null)
-                    // Fallback to database if username is still null
                     if (username == null) {
                         val databaseManager = DatabaseManager(this@LandingPageActivity)
-                        // Assuming you have a method to get the first user or a default
                         username = databaseManager.getAnyUser()?.first ?: "User"
                     }
                     LandingPage(
@@ -112,77 +114,120 @@ fun LandingPage(
         else -> "Good Evening"
     }
     var showConversionDialog by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    var isDarkMode by remember { mutableStateOf(false) }
+
+    val animatedAlpha by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 800, easing = LinearOutSlowInEasing)
+    )
 
     ModalNavigationDrawer(
         drawerContent = {
-            DrawerContent(username = username, onClose = { scope.launch { drawerState.close() } })
+            DrawerContent(
+                username = username,
+                isDarkMode = isDarkMode,
+                onDarkModeToggle = { isDarkMode = !isDarkMode },
+                onClose = { scope.launch { drawerState.close() } }
+            )
         },
         drawerState = drawerState,
         gesturesEnabled = true,
-        scrimColor = Color.Black.copy(alpha = 0.5f)
+        scrimColor = Color.Black.copy(alpha = 0.6f)
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = "$greeting, $username",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(
-                                Icons.Default.Menu,
-                                contentDescription = "Open Menu",
-                                tint = Color.White
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(listOf(GradientStart, GradientEnd))
+                )
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "$greeting, $username",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextColor,
+                                modifier = Modifier.alpha(animatedAlpha)
                             )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(
+                                    Icons.Default.Menu,
+                                    contentDescription = "Open Menu",
+                                    tint = TextColor,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    isRefreshing = true
+                                    scope.launch {
+                                        delay(800)
+                                        isRefreshing = false
+                                    }
+                                },
+                                enabled = !isRefreshing
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    tint = if (isRefreshing) TextColor.copy(alpha = 0.5f) else TextColor,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
                         }
-                    }
-                )
-            },
-            bottomBar = {
-                BottomNavigationBar(username = username)
-            },
-            floatingActionButton = {
-                val scale by animateFloatAsState(
-                    targetValue = if (showConversionDialog) 1.2f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)
-                )
-                FloatingActionButton(
-                    onClick = { showConversionDialog = true },
-                    containerColor = AccentColor,
-                    contentColor = Color.Black,
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .size(60.dp)
-                        .scale(scale)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Start Conversion")
-                }
-            },
-            containerColor = Color.Transparent
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(listOf(GradientStart, GradientEnd))
                     )
-            ) {
+                },
+                bottomBar = {
+                    BottomNavigationBar(username = username)
+                },
+                floatingActionButton = {
+                    val scale by animateFloatAsState(
+                        targetValue = if (showConversionDialog) 1.15f else 1f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                    )
+                    FloatingActionButton(
+                        onClick = { showConversionDialog = true },
+                        containerColor = AccentColor,
+                        contentColor = Color.Black,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .scale(scale)
+                    ) {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = "Start Conversion",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                },
+                containerColor = Color.Transparent
+            ) { paddingValues ->
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 16.dp)
+                    contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
                     item {
+                        QuickAccessToolbar(username = username)
+                    }
+                    item {
                         HeroSection(onBaseConvertClick)
+                    }
+                    item {
+                        QuickCalculatorWidget()
                     }
                     item {
                         FeaturesSection()
@@ -191,6 +236,21 @@ fun LandingPage(
                         TestimonialSection()
                     }
                 }
+            }
+
+            if (isRefreshing) {
+                val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.refresh_icon))
+                LottieAnimation(
+                    composition = composition,
+                    iterations = LottieConstants.IterateForever,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .align(Alignment.TopCenter)
+                        .offset(y = 72.dp)
+                        .zIndex(1f)
+                        .background(AccentColor, CircleShape)
+                        .padding(6.dp)
+                )
             }
         }
     }
@@ -207,57 +267,54 @@ fun LandingPage(
 }
 
 @Composable
-fun DrawerContent(username: String, onClose: () -> Unit) {
+fun DrawerContent(
+    username: String,
+    isDarkMode: Boolean,
+    onDarkModeToggle: () -> Unit,
+    onClose: () -> Unit
+) {
     val context = LocalContext.current
     Column(
         modifier = Modifier
-            .width(280.dp)
+            .width(260.dp)
             .fillMaxHeight()
             .background(GradientStart)
-            .padding(20.dp)
+            .padding(16.dp)
     ) {
-        // Drawer Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.verticalGradient(listOf(GradientStart, Color(0xFFB00000)))
-                )
-                .padding(12.dp),
+                .padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Person,
-                contentDescription = "User",
-                tint = AccentColor,
+            val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.user_icon))
+            LottieAnimation(
+                composition = composition,
+                iterations = LottieConstants.IterateForever,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f))
-                    .padding(6.dp)
+                    .background(FrostedBackground)
+                    .padding(4.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(
                     text = username,
-                    fontSize = 20.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = TextColor
                 )
                 Text(
                     text = "Menu",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = TextColor.copy(alpha = 0.7f)
                 )
             }
         }
-        Divider(color = Color.White.copy(alpha = 0.3f), thickness = 1.dp)
-        Spacer(modifier = Modifier.height(12.dp))
+        Divider(color = TextColor.copy(alpha = 0.3f), thickness = 1.dp)
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Drawer Items with scale-and-fade animation
         DrawerItem("Profile", Icons.Default.Person) {
             Intent(context, ProfileActivity::class.java).apply {
                 putExtra("logged_in_user", username)
@@ -277,9 +334,13 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
         DrawerItem("History", Icons.Default.History) {
             Intent(context, HistoryActivity::class.java).apply {
                 putExtra("logged_in_user", username)
-                    context.startActivity(this)
-                    (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
+            onClose()
+        }
+        DrawerItem("Theme: ${if (isDarkMode) "Dark" else "Light"}", Icons.Default.Brightness6) {
+            onDarkModeToggle()
             onClose()
         }
         DrawerItem("Logout", Icons.Default.ExitToApp) {
@@ -291,48 +352,50 @@ fun DrawerContent(username: String, onClose: () -> Unit) {
             (context as? ComponentActivity)?.finish()
             onClose()
         }
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = "© 2025 Base Converter",
+            fontSize = 12.sp,
+            color = TextColor.copy(alpha = 0.7f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 @Composable
 fun DrawerItem(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
     var isHovered by remember { mutableStateOf(false) }
     var isAnimating by remember { mutableStateOf(false) }
     var animationTrigger by remember { mutableStateOf(0) }
 
-    // Scale animation for hover and press
     val scale by animateFloatAsState(
-        targetValue = if (isAnimating) 0.9f else if (isHovered) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-    )
-
-    // Alpha animation for press
-    val alpha by animateFloatAsState(
-        targetValue = if (isAnimating) 0.5f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+        targetValue = if (isAnimating) 0.95f else if (isHovered) 1.03f else 1f,
+        animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
     )
 
     LaunchedEffect(animationTrigger) {
         if (animationTrigger > 0) {
             isAnimating = true
-            // Total animation duration: 400ms (200ms down, 200ms back)
-            kotlinx.coroutines.delay(200)
+            delay(150)
             isAnimating = false
-            kotlinx.coroutines.delay(200)
+            delay(150)
             onClick()
         }
     }
 
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(DrawerItemBackground)
+            .background(if (isHovered) DrawerItemBackground else Color.Transparent)
             .clickable(
                 onClick = {
                     animationTrigger++
@@ -341,30 +404,22 @@ fun DrawerItem(
                 onClickLabel = "Navigate to $text"
             )
             .scale(scale)
-            .alpha(alpha)
-            .shadow(4.dp, RoundedCornerShape(8.dp)),
-        color = DrawerItemBackground
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                tint = AccentColor,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = text,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = AccentColor,
+            modifier = Modifier.size(26.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = text,
+            color = TextColor,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
@@ -374,214 +429,404 @@ fun BottomNavigationBar(username: String) {
 
     NavigationBar(
         containerColor = FrostedBackground,
-        contentColor = Color.White
+        contentColor = TextColor
     ) {
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.Black) },
-            label = { Text("Home", color = Color.Black) },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = AccentColor, modifier = Modifier.size(28.dp)) },
+            label = { Text("Home", color = AccentColor, fontSize = 12.sp) },
             selected = true,
-            onClick = { /* Already on Home, no action needed */ }
+            onClick = { /* Already on Home */ }
         )
         NavigationBarItem(
             icon = {
-                var animationTrigger by remember { mutableStateOf(0) }
-                var isAnimating by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.9f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.5f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-
-                LaunchedEffect(animationTrigger) {
-                    if (animationTrigger > 0) {
-                        isAnimating = true
-                        kotlinx.coroutines.delay(200)
-                        isAnimating = false
-                        kotlinx.coroutines.delay(200)
-                        Intent(context, ProfileActivity::class.java).apply {
-                            putExtra("logged_in_user", username)
-                            context.startActivity(this)
-                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .scale(scale)
-                        .alpha(alpha),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = "Profile",
-                        tint = Color.Black,
-                        modifier = Modifier.clickable { animationTrigger++ }
-                    )
-                }
-            },
-            label = {
-                var animationTrigger by remember { mutableStateOf(0) }
-                var isAnimating by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.9f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.5f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-
-                LaunchedEffect(animationTrigger) {
-                    if (animationTrigger > 0) {
-                        isAnimating = true
-                        kotlinx.coroutines.delay(200)
-                        isAnimating = false
-                        kotlinx.coroutines.delay(200)
-                        Intent(context, ProfileActivity::class.java).apply {
-                            putExtra("logged_in_user", username)
-                            context.startActivity(this)
-                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-                        }
-                    }
-                }
-
-                Text(
-                    "Profile",
-                    color = Color.Black,
-                    modifier = Modifier
-                        .scale(scale)
-                        .alpha(alpha)
-                        .clickable { animationTrigger++ }
+                val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.profile_icon))
+                LottieAnimation(
+                    composition = composition,
+                    iterations = LottieConstants.IterateForever,
+                    modifier = Modifier.size(28.dp)
                 )
             },
+            label = { Text("Profile", color = AccentColor, fontSize = 12.sp) },
             selected = false,
-            onClick = { /* Handled by icon and label */ }
+            onClick = {
+                Intent(context, ProfileActivity::class.java).apply {
+                    putExtra("logged_in_user", username)
+                    context.startActivity(this)
+                    (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                }
+            }
         )
         NavigationBarItem(
             icon = {
-                var animationTrigger by remember { mutableStateOf(0) }
-                var isAnimating by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.9f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.5f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-
-                LaunchedEffect(animationTrigger) {
-                    if (animationTrigger > 0) {
-                        isAnimating = true
-                        kotlinx.coroutines.delay(200)
-                        isAnimating = false
-                        kotlinx.coroutines.delay(200)
-                        Intent(context, HistoryActivity::class.java).apply {
-                            putExtra("logged_in_user", username)
-                            context.startActivity(this)
-                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .scale(scale)
-                        .alpha(alpha),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.History,
-                        contentDescription = "History",
-                        tint = Color.Black,
-                        modifier = Modifier.clickable { animationTrigger++ }
-                    )
-                }
-            },
-            label = {
-                var animationTrigger by remember { mutableStateOf(0) }
-                var isAnimating by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.9f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = if (isAnimating) 0.5f else 1f,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-                )
-
-                LaunchedEffect(animationTrigger) {
-                    if (animationTrigger > 0) {
-                        isAnimating = true
-                        kotlinx.coroutines.delay(200)
-                        isAnimating = false
-                        kotlinx.coroutines.delay(200)
-                        Intent(context, HistoryActivity::class.java).apply {
-                            putExtra("logged_in_user", username)
-                            context.startActivity(this)
-                            (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-                        }
-                    }
-                }
-
-                Text(
-                    "History",
-                    color = Color.Black,
-                    modifier = Modifier
-                        .scale(scale)
-                        .alpha(alpha)
-                        .clickable { animationTrigger++ }
+                val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.history_icon))
+                LottieAnimation(
+                    composition = composition,
+                    iterations = LottieConstants.IterateForever,
+                    modifier = Modifier.size(28.dp)
                 )
             },
+            label = { Text("History", color = AccentColor, fontSize = 12.sp) },
             selected = false,
-            onClick = { /* Handled by icon and label */ }
+            onClick = {
+                Intent(context, HistoryActivity::class.java).apply {
+                    putExtra("logged_in_user", username)
+                    context.startActivity(this)
+                    (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                }
+            }
         )
     }
 }
 
 @Composable
-fun HeroSection(onBaseConvertClick: () -> Unit) {
-    Box(
+fun QuickAccessToolbar(username: String) {
+    val context = LocalContext.current
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(FrostedBackground)
-            .padding(20.dp)
-            .clickable { onBaseConvertClick() }
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
+        QuickAccessButton(Icons.Default.Calculate, "Converter") {
+            Intent(context, BaseConverterActivity::class.java).apply {
+                putExtra("logged_in_user", username)
+                context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
+        }
+        QuickAccessButton(Icons.Default.Note, "Notes") {
+            Intent(context, NotesActivity::class.java).apply {
+                putExtra("logged_in_user", username)
+                context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
+        }
+        QuickAccessButton(Icons.Default.History, "History") {
+            Intent(context, HistoryActivity::class.java).apply {
+                putExtra("logged_in_user", username)
+                context.startActivity(this)
+                (context as? ComponentActivity)?.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickAccessButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    var isAnimating by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isAnimating) 0.95f else 1f,
+        animationSpec = tween(durationMillis = 150)
+    )
+    val scope = rememberCoroutineScope()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable {
+                isAnimating = true
+                scope.launch {
+                    delay(150)
+                    isAnimating = false
+                    onClick()
+                }
+            }
+            .scale(scale)
+            .padding(6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = AccentColor,
+            modifier = Modifier.size(32.dp)
+        )
+        Text(
+            text = label,
+            color = TextColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun QuickCalculatorWidget() {
+    var inputNumber by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    var fromBase by remember { mutableStateOf(10) }
+    var toBase by remember { mutableStateOf(2) }
+    var result by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .background(FrostedBackground, RoundedCornerShape(12.dp)),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Quick Base Converter",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColor,
+            modifier = Modifier.padding(top = 12.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = inputNumber,
+            onValueChange = { inputNumber = it },
+            label = { Text("Enter Number", color = TextColor.copy(alpha = 0.7f)) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentColor,
+                unfocusedBorderColor = TextColor.copy(alpha = 0.5f),
+                cursorColor = AccentColor,
+                focusedTextColor = TextColor,
+                unfocusedTextColor = TextColor
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            BaseSelector("From Base", fromBase) { fromBase = it }
+            BaseSelector("To Base", toBase) { toBase = it }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        ButtonWithAnimation(
+            onClick = {
+                try {
+                    val number = inputNumber.text.trim()
+                    if (number.isNotEmpty()) {
+                        val value = number.toLong(fromBase)
+                        result = value.toString(toBase).uppercase()
+                    } else {
+                        result = "Enter a number"
+                    }
+                } catch (e: Exception) {
+                    result = "Invalid input"
+                }
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentColor,
+                contentColor = Color.Black
+            ),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+        ) {
+            Text("Convert", fontSize = 16.sp)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = result,
+            fontSize = 18.sp,
+            color = TextColor,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+    }
+}
+
+@Composable
+fun BaseSelector(label: String, selectedBase: Int, onBaseSelected: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val bases = (2..36).toList()
+
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.width(110.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextColor)
+        ) {
+            Text("$selectedBase", fontSize = 14.sp)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(FrostedBackground)
+        ) {
+            bases.forEach { base ->
+                DropdownMenuItem(
+                    text = { Text(base.toString(), color = TextColor, fontSize = 14.sp) },
+                    onClick = {
+                        onBaseSelected(base)
+                        expanded = false
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeroSection(onBaseConvertClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .background(FrostedBackground, RoundedCornerShape(12.dp))
+            .clickable { onBaseConvertClick() }
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.converter_icon))
+        LottieAnimation(
+            composition = composition,
+            iterations = LottieConstants.IterateForever,
+            modifier = Modifier.size(80.dp)
+        )
+        Text(
+            text = "Convert Numbers Seamlessly",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColor,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Instantly convert between bases 2-36 with ease!",
+            fontSize = 16.sp,
+            color = TextColor.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        ButtonWithAnimation(
+            onClick = onBaseConvertClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentColor,
+                contentColor = Color.Black
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Text("Start Now", fontSize = 16.sp)
+        }
+    }
+}
+
+@Composable
+fun FeaturesSection() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .background(FrostedBackground, RoundedCornerShape(12.dp))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Why Choose Us?",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColor
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        FeatureItem("Fast Conversions", "Real-time results as you type")
+        FeatureItem("Wide Support", "Bases 2 to 36 covered")
+        FeatureItem("History Tracking", "Review past conversions")
+    }
+}
+
+@Composable
+fun TestimonialSection() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .background(FrostedBackground, RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "What Users Say",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColor
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "\"Super intuitive and lightning fast!\"",
+            fontSize = 16.sp,
+            color = TextColor.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun CompactConversionDialog(
+    onDismiss: () -> Unit,
+    onBaseConvertClick: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier
+                .width(280.dp)
+                .background(FrostedBackground, RoundedCornerShape(12.dp))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Convert Numbers Effortlessly",
-                fontSize = 24.sp,
+                text = "Start Conversion",
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
+                color = TextColor
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Start converting between bases 2-36 instantly!",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             ButtonWithAnimation(
                 onClick = onBaseConvertClick,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AccentColor,
                     contentColor = Color.Black
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Start Now", fontSize = 16.sp)
+                Text("Base Converter", fontSize = 16.sp)
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancel", color = AccentColor, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun FeatureItem(title: String, description: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(AccentColor, CircleShape)
+        )
+        Column(
+            modifier = Modifier.padding(start = 10.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextColor
+            )
+            Text(
+                text = description,
+                fontSize = 14.sp,
+                color = TextColor.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -597,20 +842,16 @@ fun ButtonWithAnimation(
     var animationTrigger by remember { mutableStateOf(0) }
     var isAnimating by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isAnimating) 0.9f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-    )
-    val alpha by animateFloatAsState(
-        targetValue = if (isAnimating) 0.5f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+        targetValue = if (isAnimating) 0.95f else 1f,
+        animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
     )
 
     LaunchedEffect(animationTrigger) {
         if (animationTrigger > 0) {
             isAnimating = true
-            kotlinx.coroutines.delay(200)
+            delay(150)
             isAnimating = false
-            kotlinx.coroutines.delay(200)
+            delay(150)
             onClick()
         }
     }
@@ -619,141 +860,9 @@ fun ButtonWithAnimation(
         onClick = { animationTrigger++ },
         colors = colors,
         shape = shape,
-        modifier = modifier
-            .scale(scale)
-            .alpha(alpha)
+        modifier = modifier.scale(scale)
     ) {
         content()
-    }
-}
-
-@Composable
-fun FeaturesSection() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(FrostedBackground)
-            .padding(16.dp)
-    ) {
-        Column {
-            Text(
-                text = "Why Choose Us?",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            FeatureItem("Instant Results", "Convert bases in real-time")
-            FeatureItem("Wide Range", "Supports bases 2 to 36")
-            FeatureItem("Track History", "Access your past conversions")
-        }
-    }
-}
-
-@Composable
-fun TestimonialSection() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(FrostedBackground)
-            .padding(16.dp)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "User Feedback",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "\"The smoothest converter app out there!\"",
-                fontSize = 16.sp,
-                color = Color.Black.copy(alpha = 0.8f),
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-fun CompactConversionDialog(
-    onDismiss: () -> Unit,
-    onBaseConvertClick: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = FrostedBackground,
-            modifier = Modifier
-                .width(280.dp)
-                .clip(RoundedCornerShape(16.dp))
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Start Conversion",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                ButtonWithAnimation(
-                    onClick = onBaseConvertClick,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AccentColor,
-                        contentColor = Color.Black
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Base Converter")
-                }
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Cancel", color = AccentColor)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun FeatureItem(title: String, description: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .background(AccentColor, CircleShape)
-        )
-        Column(
-            modifier = Modifier.padding(start = 12.dp)
-        ) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White
-            )
-            Text(
-                text = description,
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.8f)
-            )
-        }
     }
 }
 
