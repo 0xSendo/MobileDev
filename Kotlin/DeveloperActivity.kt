@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.baseconverter.ui.theme.BaseConverterTheme
 import kotlinx.coroutines.delay
 
+
 class DeveloperActivity : ComponentActivity() {
     private var backPressedTime: Long = 0
     private val BACK_PRESS_INTERVAL = 2000L
@@ -338,7 +339,6 @@ fun TeamMember(profileImage: Int, name: String, bio: String, funFact: String) {
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                color = Pink,
                 fontSize = 16.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
